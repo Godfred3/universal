@@ -1,21 +1,24 @@
 import { Fonts, Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/hooks/use-theme';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MessageCircle, Shield } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const PHONE_NUMBER = '+233 55 123 4567';
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 32;
 
 export default function OTPScreen() {
     const router = useRouter();
     const colors = useTheme();
+    const { phone } = useLocalSearchParams<{ phone: string }>();
+    const { verifyOtp, signInWithPhone } = useAuth();
     const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
     const [focusedIndex, setFocusedIndex] = useState(0);
     const [countdown, setCountdown] = useState(RESEND_SECONDS);
+    const [isLoading, setIsLoading] = useState(false);
     const inputs = useRef<Array<TextInput | null>>([]);
 
     useEffect(() => {
@@ -39,16 +42,27 @@ export default function OTPScreen() {
         }
     };
 
-    const handleVerify = () => {
-        router.push('/(auth)/profile');
-    };
-
-    const handleResend = () => {
-        if (countdown === 0) {
-            setCountdown(RESEND_SECONDS);
+    const handleVerify = async () => {
+        if (!phone) return;
+        setIsLoading(true);
+        const { error } = await verifyOtp(phone, otp.join(''));
+        setIsLoading(false);
+        if (error) {
+            Alert.alert('Invalid Code', error.message);
             setOtp(Array(OTP_LENGTH).fill(''));
             inputs.current[0]?.focus();
+        } else {
+            router.replace('/(auth)/profile');
         }
+    };
+
+    const handleResend = async () => {
+        if (countdown > 0 || !phone) return;
+        setCountdown(RESEND_SECONDS);
+        setOtp(Array(OTP_LENGTH).fill(''));
+        inputs.current[0]?.focus();
+        const { error } = await signInWithPhone(phone);
+        if (error) Alert.alert('Error', 'Could not resend code. Try again.');
     };
 
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -75,7 +89,7 @@ export default function OTPScreen() {
                     Enter the 6-digit verification code sent to
                 </Text>
                 <Text style={[styles.phoneNumber, { color: colors.text, fontFamily: Fonts.sansBold }]}>
-                    {PHONE_NUMBER}
+                    {phone ?? 'your number'}
                 </Text>
                 <TouchableOpacity onPress={() => router.back()}>
                     <Text style={[styles.editLink, { color: colors.primary, fontFamily: Fonts.sans }]}>
@@ -135,17 +149,18 @@ export default function OTPScreen() {
             <TouchableOpacity
                 style={[
                     styles.button,
-                    { backgroundColor: isComplete ? colors.primary : colors.backgroundSelected }
+                    { backgroundColor: isComplete && !isLoading ? colors.primary : colors.backgroundSelected }
                 ]}
-                disabled={!isComplete}
+                disabled={!isComplete || isLoading}
                 onPress={handleVerify}
             >
-                <Text style={[styles.buttonText, {
-                    color: isComplete ? '#FFF' : colors.textSecondary,
-                    fontFamily: Fonts.sansMedium
-                }]}>
-                    Verify
-                </Text>
+                {isLoading
+                    ? <ActivityIndicator color="#FFF" />
+                    : <Text style={[styles.buttonText, {
+                        color: isComplete ? '#FFF' : colors.textSecondary,
+                        fontFamily: Fonts.sansMedium
+                    }]}>Verify</Text>
+                }
             </TouchableOpacity>
 
             {/* Support Footer */}

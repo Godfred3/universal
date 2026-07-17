@@ -1,4 +1,5 @@
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { AuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/theme-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -33,7 +34,9 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider>
-      <InnerLayout />
+      <AuthProvider>
+        <InnerLayout />
+      </AuthProvider>
     </ThemeProvider>
   );
 }

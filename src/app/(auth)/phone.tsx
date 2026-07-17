@@ -1,9 +1,10 @@
 import { Fonts, Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/hooks/use-theme';
 import { useRouter } from 'expo-router';
 import { ChevronDown, Phone, Shield } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const COUNTRIES = [
@@ -133,26 +134,42 @@ const getAbbr = (flag: string) => [...flag].map(c => String.fromCharCode(c.codeP
 export default function PhoneScreen() {
     const router = useRouter();
     const colors = useTheme();
+    const { signInWithPhone } = useAuth();
     const [phoneNumber, setPhoneNumber] = useState('');
     const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
     const [isPickerVisible, setPickerVisible] = useState(false);
     const [search, setSearch] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     const filteredCountries = COUNTRIES.filter((c) =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
         c.code.includes(search)
     );
 
-    const handleContinue = () => {
+    // Normalise: strip leading 0 from local number then prepend country code
+    const fullPhone = `${selectedCountry.code}${phoneNumber.replace(/^0/, '').replace(/\D/g, '')}`;
+
+    const handleContinue = async () => {
+        if (!phoneNumber) return;
+
         Alert.alert(
-            "Confirm Number",
-            `Are you sure ${selectedCountry.code} ${phoneNumber} is correct?`,
+            'Confirm Number',
+            `Send verification code to ${fullPhone}?`,
             [
-                { text: "Cancel", style: "cancel" },
+                { text: 'Cancel', style: 'cancel' },
                 {
-                    text: "Confirm",
-                    onPress: () => router.push('/(auth)/otp')
-                }
+                    text: 'Confirm',
+                    onPress: async () => {
+                        setIsLoading(true);
+                        const { error } = await signInWithPhone(fullPhone);
+                        setIsLoading(false);
+                        if (error) {
+                            Alert.alert('Error', error.message);
+                        } else {
+                            router.push({ pathname: '/(auth)/otp', params: { phone: fullPhone } });
+                        }
+                    },
+                },
             ]
         );
     };
@@ -222,17 +239,18 @@ export default function PhoneScreen() {
             <TouchableOpacity
                 style={[
                     styles.button,
-                    { backgroundColor: phoneNumber ? colors.primary : colors.backgroundSelected }
+                    { backgroundColor: phoneNumber && !isLoading ? colors.primary : colors.backgroundSelected }
                 ]}
-                disabled={!phoneNumber}
+                disabled={!phoneNumber || isLoading}
                 onPress={handleContinue}
             >
-                <Text style={[styles.buttonText, {
-                    color: phoneNumber ? '#FFF' : colors.textSecondary,
-                    fontFamily: Fonts.sansMedium
-                }]}>
-                    Continue
-                </Text>
+                {isLoading
+                    ? <ActivityIndicator color="#FFF" />
+                    : <Text style={[styles.buttonText, {
+                        color: phoneNumber ? '#FFF' : colors.textSecondary,
+                        fontFamily: Fonts.sansMedium
+                    }]}>Continue</Text>
+                }
             </TouchableOpacity>
 
             <Text style={[styles.footerText, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>
