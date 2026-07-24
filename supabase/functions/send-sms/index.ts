@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Supabase Edge Function: send-sms
 // ─────────────────────────────────────────────────────────────────────────────
 // This function is invoked as a webhook by Supabase Auth whenever it needs to
@@ -7,14 +8,12 @@
 //   Authentication → Hooks → Send SMS → Edge Function → "send-sms"
 //
 // Required Supabase Secrets (set via: supabase secrets set KEY=value):
-//   HUBTEL_CLIENT_ID     — Your Hubtel app Client ID
-//   HUBTEL_CLIENT_SECRET — Your Hubtel app Client Secret
-//   HUBTEL_SENDER_ID     — The sender name shown on SMS (e.g. "UniversalChat")
+//   TWILIO_ACCOUNT_SID — Your Twilio Account SID (starts with AC)
+//   TWILIO_AUTH_TOKEN  — Your Twilio Auth Token
+//   TWILIO_FROM_NUMBER — Your Twilio Phone Number or Messaging Service SID
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-
-const HUBTEL_API_URL = 'https://smsc.hubtel.com/v1/messages/send';
 
 serve(async (req: Request) => {
     try {
@@ -31,49 +30,52 @@ serve(async (req: Request) => {
             );
         }
 
-        // ─── Hubtel credentials from Supabase Secrets ─────────────────────
-        const clientId = Deno.env.get('HUBTEL_CLIENT_ID');
-        const clientSecret = Deno.env.get('HUBTEL_CLIENT_SECRET');
-        const senderId = Deno.env.get('HUBTEL_SENDER_ID') ?? 'UniversalChat';
+        // ─── Twilio credentials from Supabase Secrets ──────────────────────
+        const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
+        const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+        const fromNumber = Deno.env.get('TWILIO_FROM_NUMBER');
 
-        if (!clientId || !clientSecret) {
-            console.error('Hubtel credentials not configured');
+        if (!accountSid || !authToken || !fromNumber) {
+            console.error('Twilio credentials not fully configured');
             return new Response(
-                JSON.stringify({ error: 'SMS service not configured' }),
+                JSON.stringify({ error: 'SMS service credentials missing' }),
                 { status: 500, headers: { 'Content-Type': 'application/json' } }
             );
         }
 
-        const basicAuth = btoa(`${clientId}:${clientSecret}`);
+        const twilioApiUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+        const basicAuth = btoa(`${accountSid}:${authToken}`);
 
-        // ─── Send SMS via Hubtel ──────────────────────────────────────────
-        const response = await fetch(HUBTEL_API_URL, {
+        // Construct url-encoded form body as required by Twilio
+        const bodyParams = new URLSearchParams();
+        bodyParams.append('To', phone);
+        bodyParams.append('From', fromNumber);
+        bodyParams.append('Body', `Your Universal Chat verification code is: ${otp}. It expires in 5 minutes. Do not share this code.`);
+
+        // ─── Send SMS via Twilio ───────────────────────────────────────────
+        const response = await fetch(twilioApiUrl, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': `Basic ${basicAuth}`,
             },
-            body: JSON.stringify({
-                From: senderId,
-                To: phone,
-                Content: `Your Universal Chat verification code is: ${otp}. It expires in 5 minutes. Do not share this code.`,
-            }),
+            body: bodyParams.toString(),
         });
 
         const result = await response.json();
 
         if (!response.ok) {
-            console.error('Hubtel API error:', result);
+            console.error('Twilio API error:', result);
             return new Response(
                 JSON.stringify({ error: 'Failed to send SMS', details: result }),
                 { status: 500, headers: { 'Content-Type': 'application/json' } }
             );
         }
 
-        console.log(`OTP sent successfully to ${phone}`, result);
+        console.log(`OTP sent successfully to ${phone} via Twilio`, result);
 
         return new Response(
-            JSON.stringify({ success: true, messageId: result.MessageId }),
+            JSON.stringify({ success: true, messageId: result.sid }),
             { status: 200, headers: { 'Content-Type': 'application/json' } }
         );
 

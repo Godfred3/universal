@@ -8,7 +8,7 @@ interface AuthContextType {
     session: Session | null;
     user: User | null;
     isLoading: boolean;
-    /** Step 1: Sends OTP via Hubtel edge function */
+    /** Step 1: Sends OTP via Twilio edge function */
     signInWithPhone: (phone: string) => Promise<{ error: Error | null }>;
     /** Step 2: Verifies the 6-digit OTP entered by the user */
     verifyOtp: (phone: string, token: string) => Promise<{ error: Error | null }>;
@@ -47,8 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     /**
      * Step 1 — Send OTP
-     * Calls the Supabase Edge Function `send-sms` which uses Hubtel to deliver
-     * the OTP. Supabase generates the token internally; Hubtel sends the SMS.
+     * Calls the Supabase Edge Function `send-sms` which uses Twilio to deliver
+     * the OTP. Supabase generates the token internally; Twilio sends the SMS.
      */
     const signInWithPhone = async (phone: string): Promise<{ error: Error | null }> => {
         const { error } = await supabase.auth.signInWithOtp({ phone });

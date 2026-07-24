@@ -129,6 +129,108 @@ const COUNTRIES = [
     { name: 'Comoros', code: '+269', flag: '🇰🇲' },
 ];
 
+const COUNTRY_LOCAL_LENGTHS: Record<string, number> = {
+    '+1': 10,
+    '+52': 10,
+    '+44': 10,
+    '+33': 9,
+    '+49': 10,
+    '+39': 10,
+    '+34': 9,
+    '+351': 9,
+    '+31': 9,
+    '+32': 9,
+    '+46': 9,
+    '+47': 8,
+    '+45': 8,
+    '+358': 9,
+    '+48': 9,
+    '+7': 10,
+    '+380': 9,
+    '+41': 9,
+    '+43': 9,
+    '+30': 10,
+    '+90': 10,
+    '+91': 10,
+    '+86': 11,
+    '+81': 10,
+    '+82': 10,
+    '+92': 10,
+    '+880': 10,
+    '+62': 10,
+    '+63': 10,
+    '+84': 9,
+    '+66': 9,
+    '+60': 9,
+    '+65': 8,
+    '+966': 9,
+    '+971': 9,
+    '+964': 10,
+    '+98': 10,
+    '+61': 9,
+    '+64': 9,
+    '+55': 11,
+    '+54': 10,
+    '+57': 10,
+    '+56': 9,
+    '+51': 9,
+    '+58': 10,
+    '+20': 10,
+    '+213': 9,
+    '+212': 9,
+    '+216': 8,
+    '+218': 9,
+    '+249': 9,
+    '+234': 10,
+    '+233': 9,
+    '+221': 9,
+    '+225': 8,
+    '+237': 9,
+    '+223': 8,
+    '+226': 8,
+    '+227': 8,
+    '+224': 8,
+    '+229': 8,
+    '+228': 8,
+    '+232': 8,
+    '+231': 7,
+    '+222': 8,
+    '+238': 7,
+    '+220': 7,
+    '+245': 7,
+    '+251': 9,
+    '+254': 9,
+    '+255': 9,
+    '+256': 9,
+    '+250': 9,
+    '+252': 9,
+    '+211': 9,
+    '+253': 8,
+    '+291': 7,
+    '+257': 8,
+    '+261': 9,
+    '+258': 9,
+    '+265': 9,
+    '+260': 9,
+    '+263': 9,
+    '+243': 9,
+    '+242': 9,
+    '+235': 8,
+    '+236': 8,
+    '+241': 8,
+    '+240': 9,
+    '+239': 7,
+    '+27': 9,
+    '+244': 9,
+    '+264': 9,
+    '+267': 7,
+    '+266': 8,
+    '+268': 8,
+    '+230': 8,
+    '+248': 7,
+    '+269': 7,
+};
+
 const getAbbr = (flag: string) => [...flag].map(c => String.fromCharCode(c.codePointAt(0)! - 127397)).join('');
 
 export default function PhoneScreen() {
@@ -146,11 +248,20 @@ export default function PhoneScreen() {
         c.code.includes(search)
     );
 
-    // Normalise: strip leading 0 from local number then prepend country code
-    const fullPhone = `${selectedCountry.code}${phoneNumber.replace(/^0/, '').replace(/\D/g, '')}`;
+    const cleanNumber = phoneNumber.replace(/\D/g, '').replace(/^0+/, '');
+    const maxLocalLength = COUNTRY_LOCAL_LENGTHS[selectedCountry.code] ?? 10;
+    const truncatedNumber = cleanNumber.slice(0, maxLocalLength);
+    const fullPhone = `${selectedCountry.code}${truncatedNumber}`;
+    const isPhoneValid = truncatedNumber.length >= Math.min(7, maxLocalLength) && truncatedNumber.length <= maxLocalLength;
 
     const handleContinue = async () => {
-        if (!phoneNumber) return;
+        if (!isPhoneValid) {
+            Alert.alert(
+                'Invalid Phone Number',
+                `Please enter a valid phone number for ${selectedCountry.name} (up to ${maxLocalLength} digits).`
+            );
+            return;
+        }
 
         Alert.alert(
             'Confirm Number',
@@ -223,7 +334,11 @@ export default function PhoneScreen() {
                     placeholderTextColor={colors.textSecondary}
                     keyboardType="phone-pad"
                     value={phoneNumber}
-                    onChangeText={setPhoneNumber}
+                    onChangeText={(text) => {
+                        const digits = text.replace(/\D/g, '');
+                        const maxLength = COUNTRY_LOCAL_LENGTHS[selectedCountry.code] ?? 10;
+                        setPhoneNumber(digits.slice(0, maxLength));
+                    }}
                 />
             </View>
 
@@ -236,26 +351,27 @@ export default function PhoneScreen() {
                 </Text>
             </View>
 
+            <Text style={[styles.validationText, { color: isPhoneValid ? colors.textSecondary : '#FF6B6B', fontFamily: Fonts.sans, marginTop: Spacing.two }]}> 
+                {isPhoneValid ? `Enter up to ${maxLocalLength} digits for ${selectedCountry.name}.` : `Phone number must be ${Math.min(7, maxLocalLength)}-${maxLocalLength} digits.`}
+            </Text>
+
             <TouchableOpacity
                 style={[
                     styles.button,
-                    { backgroundColor: phoneNumber && !isLoading ? colors.primary : colors.backgroundSelected }
+                    { backgroundColor: isPhoneValid && !isLoading ? colors.primary : colors.backgroundSelected }
                 ]}
-                disabled={!phoneNumber || isLoading}
+                disabled={!isPhoneValid || isLoading}
                 onPress={handleContinue}
             >
                 {isLoading
                     ? <ActivityIndicator color="#FFF" />
                     : <Text style={[styles.buttonText, {
-                        color: phoneNumber ? '#FFF' : colors.textSecondary,
-                        fontFamily: Fonts.sansMedium
-                    }]}>Continue</Text>
+                        color: isPhoneValid ? '#FFF' : colors.textSecondary,
+                    }]}>
+                        Continue
+                    </Text>
                 }
             </TouchableOpacity>
-
-            <Text style={[styles.footerText, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>
-                By continuing you agree to our <Text style={{ color: colors.primary }}>Terms of Service</Text> and <Text style={{ color: colors.primary }}>Privacy Policy</Text>.
-            </Text>
 
             <Modal visible={isPickerVisible} animationType="slide" transparent={true}>
                 <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
@@ -419,6 +535,10 @@ const styles = StyleSheet.create({
         marginBottom: Spacing.two,
         paddingHorizontal: Spacing.four,
         lineHeight: 20,
+    },
+    validationText: {
+        fontSize: 13,
+        marginTop: Spacing.two,
     },
     modalOverlay: {
         flex: 1,

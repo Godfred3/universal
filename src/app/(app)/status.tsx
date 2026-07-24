@@ -303,7 +303,7 @@ export default function StatusScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={theme.text === "#ffffff" ? "light-content" : "dark-content"} backgroundColor={theme.background} />
+      <StatusBar barStyle={theme.text !== "#0D0F1E" ? "light-content" : "dark-content"} backgroundColor={theme.background} />
 
       <ScrollView
         style={{ flex: 1 }}
