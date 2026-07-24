@@ -48,7 +48,7 @@ export default function TextStatusScreen() {
     >([]);
     const [showStickerTray, setShowStickerTray] = useState(false);
 
-    const fadeAnim = useRef(new Animated.Value(1)).current;
+    const fadeAnim = useRef(new Animated.Value(1));
 
     const handleAddSticker = (emoji: string) => {
         const id = `${emoji}-${Date.now()}`;

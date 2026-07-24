@@ -70,12 +70,12 @@ export default function ProfileScreen() {
     };
 
     const handleContinue = () => {
-        router.replace('/(app)');
+        router.replace('/(auth)/permissions');
     };
 
     const handleSkipPhoto = () => {
         // Skips only the photo — name + username must already be valid
-        if (isValid) router.replace('/(app)');
+        if (isValid) router.replace('/(auth)/permissions');
     };
 
     // ── Progress indicator ────────────────────────────────────────────────────

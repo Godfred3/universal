@@ -21,9 +21,12 @@ export default function SettingsInviteFriendScreen() {
 
     const [copied, setCopied] = useState(false);
 
-    const inviteLink = Linking.createURL('/invite', {
-        queryParams: { ref: 'user_' + Math.random().toString(36).substring(2, 8) },
-    });
+    // Generate a stable invite link once on mount using useState initializer
+    const [inviteLink] = useState(() =>
+        Linking.createURL('/invite', {
+            queryParams: { ref: 'user_' + Math.random().toString(36).substring(2, 8) },
+        })
+    );
 
     const handleCopyLink = async () => {
         try {
@@ -107,7 +110,7 @@ export default function SettingsInviteFriendScreen() {
                 </View>
 
                 <Text style={[styles.footerText, { color: theme.textSecondary }]}>
-                    Your friends will be able to join the app using this link. You'll both get notified when they sign up.
+                    Your friends will be able to join the app using this link. You&apos;ll both get notified when they sign up.
                 </Text>
             </ScrollView>
         </SafeAreaView>

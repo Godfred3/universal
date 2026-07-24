@@ -87,7 +87,7 @@ export default function SettingsPrivacyScreen() {
                         <View style={styles.emptyState}>
                             <ShieldOff size={28} color={theme.textSecondary} strokeWidth={1.5} />
                             <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-                                You haven't blocked anyone
+                                You haven&apos;t blocked anyone
                             </Text>
                         </View>
                     ) : (

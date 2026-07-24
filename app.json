@@ -18,7 +18,19 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.chatapp.bhado"
+      "package": "com.chatapp.bhado",
+      "permissions": [
+        "android.permission.READ_CONTACTS",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ]
     },
     "web": {
       "output": "static",
@@ -35,7 +47,30 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow ChatApp to access your contacts to find friends already using the app."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow ChatApp to access your camera to take photos and videos.",
+          "microphonePermission": "Allow ChatApp to access your microphone to record voice messages and video calls.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow ChatApp to access your photos and videos to share media.",
+          "savePhotosPermission": "Allow ChatApp to save received photos to your gallery.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      "expo-av"
     ],
     "experiments": {
       "typedRoutes": true,

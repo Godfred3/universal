@@ -141,7 +141,7 @@ export default function SettingsAccountScreen() {
                         </Text>
                     </View>
                     <Text style={[styles.rowSubtitle, { color: theme.textSecondary, marginBottom: 16 }]}>
-                        Enter your old and new number. We'll confirm before making any changes.
+                        Enter your old and new number. We&apos;ll confirm before making any changes.
                     </Text>
 
                     <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Old number</Text>
