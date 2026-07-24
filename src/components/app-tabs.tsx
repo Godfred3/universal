@@ -1,9 +1,9 @@
 import { Tabs } from 'expo-router';
-import { View, StyleSheet, Platform } from 'react-native';
-import { Settings, MessageSquare, User, CircleDashed } from 'lucide-react-native';
+import { CircleDashed, MessageSquare, User } from 'lucide-react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
-import { useTheme } from '@/hooks/use-theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
 
 // ── Tab icon with active pill + primary underline ─────────────────────────────
 function TabIcon({

@@ -1,6 +1,31 @@
-import { supabase } from '@/lib/supabase';
+// Supabase is disabled for demo mode so the app can run with dummy auth data.
+// Re-enable by restoring the import and removing the no-backend fallback.
+// import { supabase } from '@/lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState } from 'react';
+
+// ─── Demo data ─────────────────────────────────────────────────────────────────
+const DEMO_USER = {
+    id: 'demo-user',
+    aud: 'authenticated',
+    role: 'authenticated',
+    email: 'demo@example.com',
+    app_metadata: { provider: 'demo' },
+    user_metadata: { name: 'Demo User', phone: '+10000000000' },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+} as User;
+
+const DEMO_SESSION = {
+    access_token: 'demo-access-token',
+    token_type: 'bearer',
+    expires_in: 3600,
+    refresh_token: 'demo-refresh-token',
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    provider_token: null,
+    provider_refresh_token: null,
+    user: DEMO_USER,
+} as Session;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,21 +53,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        // Restore session on app launch
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            setIsLoading(false);
-        });
-
-        // Listen for auth state changes (login, logout, token refresh)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            setIsLoading(false);
-        });
-
-        return () => subscription.unsubscribe();
+        // Demo session only, no database required.
+        setSession(DEMO_SESSION);
+        setUser(DEMO_USER);
+        setIsLoading(false);
     }, []);
 
     /**
@@ -50,28 +64,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
      * Calls the Supabase Edge Function `send-sms` which uses Twilio to deliver
      * the OTP. Supabase generates the token internally; Twilio sends the SMS.
      */
-    const signInWithPhone = async (phone: string): Promise<{ error: Error | null }> => {
-        const { error } = await supabase.auth.signInWithOtp({ phone });
-        if (error) return { error: new Error(error.message) };
+    const signInWithPhone = async (_phone: string): Promise<{ error: Error | null }> => {
         return { error: null };
     };
 
     /**
      * Step 2 — Verify OTP
-     * Supabase validates the token against the one it generated for the phone number.
+     * Demo mode bypasses actual verification.
      */
-    const verifyOtp = async (phone: string, token: string): Promise<{ error: Error | null }> => {
-        const { error } = await supabase.auth.verifyOtp({
-            phone,
-            token,
-            type: 'sms',
-        });
-        if (error) return { error: new Error(error.message) };
+    const verifyOtp = async (_phone: string, _token: string): Promise<{ error: Error | null }> => {
         return { error: null };
     };
 
     const signOut = async () => {
-        await supabase.auth.signOut();
+        setSession(null);
+        setUser(null);
     };
 
     return (

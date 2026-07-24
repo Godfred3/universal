@@ -1,5 +1,4 @@
 import { Fonts } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 import { useRouter } from 'expo-router';
 import { Check, Smile, Type, X } from 'lucide-react-native';
 import { useRef, useState } from 'react';
@@ -36,7 +35,6 @@ const FONT_STYLES: { label: string; family?: string }[] = [
 ];
 
 export default function TextStatusScreen() {
-    const theme = useTheme();
     const router = useRouter();
     const inputRef = useRef<TextInput>(null);
 
@@ -47,11 +45,12 @@ export default function TextStatusScreen() {
         { id: string; emoji: string; x: number; y: number }[]
     >([]);
     const [showStickerTray, setShowStickerTray] = useState(false);
+    const nextStickerId = useRef(0);
 
-    const fadeAnim = useRef(new Animated.Value(1));
+    const [fadeAnim] = useState(() => new Animated.Value(1));
 
     const handleAddSticker = (emoji: string) => {
-        const id = `${emoji}-${Date.now()}`;
+        const id = `${emoji}-${nextStickerId.current++}`;
         setPlacedStickers((prev) => [
             ...prev,
             { id, emoji, x: 140 + Math.random() * 40 - 20, y: 260 + Math.random() * 40 - 20 },

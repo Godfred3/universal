@@ -21,7 +21,7 @@ serve(async (req: Request) => {
 
         // Supabase Auth webhook payload structure
         const phone: string = payload.user?.phone ?? payload.phone;
-        const otp: string = payload.token ?? payload.otp;
+        const otp: string = payload.sms?.otp ?? payload.token ?? payload.otp;
 
         if (!phone || !otp) {
             return new Response(

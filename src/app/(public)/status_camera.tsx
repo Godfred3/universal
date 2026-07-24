@@ -9,7 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function CameraScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const [selectedMedia, setSelectedMedia] = useState<string | null>(null);
+  const [selectedMedia] = useState<string | null>(null);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>

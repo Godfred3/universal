@@ -292,7 +292,7 @@ export default function PhoneScreen() {
                     Enter your phone number
                 </Text>
                 <Text style={[styles.subtitle, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>
-                    We'll send a one-time verification code to securely sign you in. Your phone number is used only for authentication.
+                    We&apos;ll send a one-time verification code to securely sign you in. Your phone number is used only for authentication.
                 </Text>
             </View>
 
@@ -335,8 +335,19 @@ export default function PhoneScreen() {
                     keyboardType="phone-pad"
                     value={phoneNumber}
                     onChangeText={(text) => {
-                        const digits = text.replace(/\D/g, '');
-                        const maxLength = COUNTRY_LOCAL_LENGTHS[selectedCountry.code] ?? 10;
+                        let digits = text.replace(/\D/g, '');
+                        
+                        // Strip country code if entered at the beginning
+                        const rawCode = selectedCountry.code.replace('+', '');
+                        if (rawCode && digits.startsWith(rawCode)) {
+                            digits = digits.slice(rawCode.length);
+                        }
+
+                        // Allow extra digit for leading zero if present
+                        const hasLeadingZero = digits.startsWith('0');
+                        const baseLength = COUNTRY_LOCAL_LENGTHS[selectedCountry.code] ?? 10;
+                        const maxLength = baseLength + (hasLeadingZero ? 1 : 0);
+                        
                         setPhoneNumber(digits.slice(0, maxLength));
                     }}
                 />

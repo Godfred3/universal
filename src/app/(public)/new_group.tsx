@@ -1,10 +1,10 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, FlatList } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Search, X, Send, Check } from 'lucide-react-native';
-import { useTheme } from '@/hooks/use-theme';
 import { Fonts } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { useRouter } from 'expo-router';
+import { ArrowLeft, Check, Search, Send, X } from 'lucide-react-native';
+import React, { useMemo, useState } from 'react';
+import { FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface Contact {
   id: string;
@@ -107,18 +107,6 @@ export default function NewGroupScreen() {
       return next;
     });
   };
-
-  const renderSelectedMember = ({ item }: { item: SelectedContact }) => (
-    <View style={styles.selectedItem}>
-      <View style={styles.selectedAvatarWrapper}>
-        <Image source={{ uri: item.avatar }} style={styles.selectedAvatar} />
-        <TouchableOpacity style={styles.removeBtn} onPress={() => removeMember(item.id)}>
-          <X size={12} color={theme.primary} />
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.selectedName} numberOfLines={1}>{item.name}</Text>
-    </View>
-  );
 
   const renderContact = ({ item }: { item: Contact }) => {
     const isSelected = selectedContacts.has(item.id);

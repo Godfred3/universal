@@ -1,31 +1,31 @@
 // app/(tabs)/chats.tsx
 import { useRouter } from "expo-router";
 import {
-  MessageSquare,
-  Mic,
-  MoreVertical,
-  Pin,
-  Plus,
-  RefreshCw,
-  Search,
-  Users
+    MessageSquare,
+    Mic,
+    MoreVertical,
+    Pin,
+    Plus,
+    RefreshCw,
+    Search,
+    Users
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
-  FlatList,
-  Platform,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    FlatList,
+    Modal,
+    Platform,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 
 import { BottomTabInset, Fonts } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
-import { Modal } from "react-native";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -130,7 +130,6 @@ function Avatar({
   colorIndex: number;
   size?: number;
 }) {
-  const theme = useTheme();
   return (
     <View
       style={[

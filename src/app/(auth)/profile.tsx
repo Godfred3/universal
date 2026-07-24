@@ -1,26 +1,85 @@
-import React, { useState, useRef } from 'react';
+import { useRouter } from 'expo-router';
+import { Camera, CheckCircle2, MessageCircle, XCircle } from 'lucide-react-native';
+import React, { useRef, useState } from 'react';
 import {
-    View,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    StyleSheet,
-    Image,
-    ScrollView,
-    KeyboardAvoidingView,
-    Platform,
+    View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Camera, MessageCircle, CheckCircle2, XCircle } from 'lucide-react-native';
 // import * as ImagePicker from 'expo-image-picker';
-import { useTheme } from '@/hooks/use-theme';
 import { Fonts, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Simulated username availability — swap in a real API call when ready
 const TAKEN_USERNAMES = ['admin', 'support', 'universalchat', 'chat', 'user'];
 
 type UsernameStatus = 'idle' | 'available' | 'taken';
+type ThemeValue = ReturnType<typeof useTheme>;
+
+function ProgressIndicator({ colors }: { colors: ThemeValue }) {
+    return (
+        <View style={styles.progressWrapper}>
+            <View style={styles.progressRow}>
+                <View style={[styles.dot, { backgroundColor: colors.primary }]} />
+                <View style={[styles.line, { backgroundColor: colors.primary }]} />
+                <View style={[styles.dot, { backgroundColor: colors.primary }]} />
+                <View style={[styles.line, { backgroundColor: colors.backgroundSelected }]} />
+                <View style={[styles.dotOutline, { borderColor: colors.backgroundSelected }]} />
+            </View>
+            <Text style={[styles.stepLabel, { color: colors.textSecondary, fontFamily: Fonts.sansMedium }]}>Profile Setup</Text>
+        </View>
+    );
+}
+
+function AvatarPicker({ colors, image, displayName, onPickImage }: { colors: ThemeValue; image: string | null; displayName: string; onPickImage: () => void }) {
+    return (
+        <View style={styles.avatarSection}>
+            <TouchableOpacity onPress={onPickImage} activeOpacity={0.85} style={styles.avatarWrapper}>
+                {image ? (
+                    <Image source={{ uri: image }} style={styles.avatarImage} />
+                ) : (
+                    <View style={[styles.avatarPlaceholder, { backgroundColor: colors.backgroundElement, borderColor: colors.backgroundSelected }]}> 
+                        <Text style={[styles.avatarInitials, { color: colors.textSecondary, fontFamily: Fonts.sansBold }]}> 
+                            {displayName.trim() ? displayName.trim().split(' ').slice(0, 2).map((word) => word[0]).join('').toUpperCase() : '?'}
+                        </Text>
+                    </View>
+                )}
+                <View style={[styles.cameraBadge, { backgroundColor: colors.primary }]}>
+                    <Camera color="#fff" size={16} strokeWidth={2.5} />
+                </View>
+            </TouchableOpacity>
+            <Text style={[styles.avatarLabel, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>Add Profile Photo</Text>
+            <Text style={[styles.avatarOptional, { color: colors.backgroundSelected, fontFamily: Fonts.sans }]}>Optional</Text>
+        </View>
+    );
+}
+
+function UsernameHelper({ colors, usernameStatus }: { colors: ThemeValue; usernameStatus: UsernameStatus }) {
+    if (usernameStatus === 'available') {
+        return (
+            <View style={styles.statusRow}>
+                <CheckCircle2 color="#22C55E" size={15} strokeWidth={2.5} />
+                <Text style={[styles.statusText, { color: '#22C55E', fontFamily: Fonts.sansMedium }]}>Available</Text>
+            </View>
+        );
+    }
+    if (usernameStatus === 'taken') {
+        return (
+            <View style={styles.statusRow}>
+                <XCircle color="#EF4444" size={15} strokeWidth={2.5} />
+                <Text style={[styles.statusText, { color: '#EF4444', fontFamily: Fonts.sansMedium }]}>Already taken</Text>
+            </View>
+        );
+    }
+    return <Text style={[styles.helperText, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>This is how people can find you.</Text>;
+}
 
 export default function ProfileScreen() {
     const router = useRouter();
@@ -38,6 +97,7 @@ export default function ProfileScreen() {
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const pickImage = async () => {
+        setImage(null);
         // TEMPORARILY DISABLED: uncomment after rebuilding native app with expo-image-picker
         /*
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -78,82 +138,7 @@ export default function ProfileScreen() {
         if (isValid) router.replace('/(auth)/permissions');
     };
 
-    // ── Progress indicator ────────────────────────────────────────────────────
-    const ProgressIndicator = () => (
-        <View style={styles.progressWrapper}>
-            <View style={styles.progressRow}>
-                <View style={[styles.dot, { backgroundColor: colors.primary }]} />
-                <View style={[styles.line, { backgroundColor: colors.primary }]} />
-                <View style={[styles.dot, { backgroundColor: colors.primary }]} />
-                <View style={[styles.line, { backgroundColor: colors.backgroundSelected }]} />
-                <View style={[styles.dotOutline, { borderColor: colors.backgroundSelected }]} />
-            </View>
-            <Text style={[styles.stepLabel, { color: colors.textSecondary, fontFamily: Fonts.sansMedium }]}>
-                Profile Setup
-            </Text>
-        </View>
-    );
 
-    // ── Avatar picker ─────────────────────────────────────────────────────────
-    const AvatarPicker = () => (
-        <View style={styles.avatarSection}>
-            <TouchableOpacity onPress={pickImage} activeOpacity={0.85} style={styles.avatarWrapper}>
-                {image ? (
-                    <Image source={{ uri: image }} style={styles.avatarImage} />
-                ) : (
-                    <View style={[styles.avatarPlaceholder, {
-                        backgroundColor: colors.backgroundElement,
-                        borderColor: colors.backgroundSelected,
-                    }]}>
-                        <Text style={[styles.avatarInitials, { color: colors.textSecondary, fontFamily: Fonts.sansBold }]}>
-                            {displayName.trim()
-                                ? displayName.trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
-                                : '?'}
-                        </Text>
-                    </View>
-                )}
-                {/* Camera badge */}
-                <View style={[styles.cameraBadge, { backgroundColor: colors.primary }]}>
-                    <Camera color="#fff" size={16} strokeWidth={2.5} />
-                </View>
-            </TouchableOpacity>
-            <Text style={[styles.avatarLabel, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>
-                Add Profile Photo
-            </Text>
-            <Text style={[styles.avatarOptional, { color: colors.backgroundSelected, fontFamily: Fonts.sans }]}>
-                Optional
-            </Text>
-        </View>
-    );
-
-    // ── Username availability badge ────────────────────────────────────────────
-    const UsernameHelper = () => {
-        if (usernameStatus === 'available') {
-            return (
-                <View style={styles.statusRow}>
-                    <CheckCircle2 color="#22C55E" size={15} strokeWidth={2.5} />
-                    <Text style={[styles.statusText, { color: '#22C55E', fontFamily: Fonts.sansMedium }]}>
-                        Available
-                    </Text>
-                </View>
-            );
-        }
-        if (usernameStatus === 'taken') {
-            return (
-                <View style={styles.statusRow}>
-                    <XCircle color="#EF4444" size={15} strokeWidth={2.5} />
-                    <Text style={[styles.statusText, { color: '#EF4444', fontFamily: Fonts.sansMedium }]}>
-                        Already taken
-                    </Text>
-                </View>
-            );
-        }
-        return (
-            <Text style={[styles.helperText, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>
-                This is how people can find you.
-            </Text>
-        );
-    };
 
     // ── Render ────────────────────────────────────────────────────────────────
     return (
@@ -168,7 +153,7 @@ export default function ProfileScreen() {
                     showsVerticalScrollIndicator={false}
                 >
                     {/* Progress */}
-                    <ProgressIndicator />
+                    <ProgressIndicator colors={colors} />
 
                     {/* Logo */}
                     <View style={styles.logoWrapper}>
@@ -191,7 +176,7 @@ export default function ProfileScreen() {
                     </View>
 
                     {/* Avatar */}
-                    <AvatarPicker />
+                    <AvatarPicker colors={colors} image={image} displayName={displayName} onPickImage={pickImage} />
 
                     {/* Display Name */}
                     <View style={styles.fieldGroup}>
@@ -247,7 +232,7 @@ export default function ProfileScreen() {
                             />
                         </View>
                         <View style={styles.usernameHelper}>
-                            <UsernameHelper />
+                            <UsernameHelper colors={colors} usernameStatus={usernameStatus} />
                         </View>
                     </View>
 

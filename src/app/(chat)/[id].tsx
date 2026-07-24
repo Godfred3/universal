@@ -1,21 +1,21 @@
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { ChevronLeft, MoreVertical, Phone, Send, Video } from "lucide-react-native";
 import React, { useMemo } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  StatusBar,
+    FlatList,
+    KeyboardAvoidingView,
+    Platform,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronLeft, Send, Phone, Video, MoreVertical } from "lucide-react-native";
 
-import { useTheme } from "@/hooks/use-theme";
 import { Fonts } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useTheme } from "@/hooks/use-theme";
 
 // ─── Dummy Data ───────────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ const MESSAGES = [
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function ChatDetailScreen() {
-  const { id, name, initials } = useLocalSearchParams();
+  const { name, initials } = useLocalSearchParams();
   const router = useRouter();
   const theme = useTheme();
   const colorScheme = useColorScheme();

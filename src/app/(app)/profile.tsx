@@ -1,35 +1,33 @@
 // screens/ProfileScreen.tsx
-import React, { useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  Platform,
-  Image,
-  Animated,
-  Alert,
-} from 'react-native';
+import { Fonts } from '@/constants/theme';
+import { useThemeContext } from '@/context/theme-context';
+import { useTheme } from '@/hooks/use-theme';
+import { useRouter } from 'expo-router';
 import {
   ArrowLeft,
-  MoreVertical,
+  Bell,
   Camera,
   Edit3,
+  HelpCircle,
   Key,
   Lock,
-  Bell,
-  HelpCircle,
-  UserPlus,
   Moon,
+  MoreVertical,
   Sun,
+  UserPlus
 } from 'lucide-react-native';
-import { useTheme } from '@/hooks/use-theme';
-import { Fonts } from '@/constants/theme';
+import React, { useState } from 'react';
+import {
+  Animated,
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useThemeContext } from '@/context/theme-context';
-import { useRouter } from 'expo-router';
 // import * as ImagePicker from 'expo-image-picker';
 
 const AnimatedSafeAreaView = Animated.createAnimatedComponent(SafeAreaView);
@@ -78,13 +76,14 @@ const SettingsRow = ({ icon, title, subtitle, onPress, rightElement }: SettingsR
 
 export default function ProfileScreen() {
   const theme = useTheme();
-  const { theme: currentTheme, setTheme, colorScheme: activeScheme } = useThemeContext();
+  const { setTheme, colorScheme: activeScheme } = useThemeContext();
   const router = useRouter();
-  const scrollY = useRef(new Animated.Value(0)).current;
+  const [scrollY] = useState(() => new Animated.Value(0));
   const isDarkMode = activeScheme === 'dark';
   const [profileImage, setProfileImage] = useState<string | null>(null);
 
   const pickImage = async () => {
+    setProfileImage(null);
     // TEMPORARILY DISABLED
     /*
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -285,6 +284,90 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
     opacity: 0.8,
+  },
+  progressWrapper: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  line: {
+    width: 28,
+    height: 2,
+    marginHorizontal: 6,
+  },
+  dotOutline: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1.5,
+  },
+  stepLabel: {
+    fontSize: 12,
+    letterSpacing: 0.8,
+  },
+  avatarSection: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  avatarWrapper: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  avatarImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+  },
+  avatarPlaceholder: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: {
+    fontSize: 30,
+    fontWeight: '700',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarLabel: {
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  avatarOptional: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statusText: {
+    fontSize: 12,
+  },
+  helperText: {
+    fontSize: 12,
+    lineHeight: 18,
   },
   actionsRow: {
     flexDirection: 'row',

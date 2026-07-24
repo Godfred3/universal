@@ -1,6 +1,6 @@
 import { Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { MoreVertical, Search, User, Users } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -54,7 +54,6 @@ const dummyContacts: Contact[] = [
 
 export default function NewChatScreen() {
   const theme = useTheme();
-  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
 
   const styles = useMemo(() => createStyles(theme), [theme]);

@@ -15,11 +15,11 @@ export default function OTPScreen() {
     const colors = useTheme();
     const { phone } = useLocalSearchParams<{ phone: string }>();
     const { verifyOtp, signInWithPhone } = useAuth();
-    const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
+    const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
     const [focusedIndex, setFocusedIndex] = useState(0);
     const [countdown, setCountdown] = useState(RESEND_SECONDS);
     const [isLoading, setIsLoading] = useState(false);
-    const inputs = useRef<Array<TextInput | null>>([]);
+    const inputs = useRef<(TextInput | null)[]>([]);
 
     useEffect(() => {
         if (countdown <= 0) return;
@@ -166,7 +166,7 @@ export default function OTPScreen() {
             {/* Support Footer */}
             <View style={styles.footer}>
                 <Text style={[styles.footerText, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>
-                    Didn't receive a code?
+                    Didn&apos;t receive a code?
                 </Text>
                 <TouchableOpacity>
                     <Text style={[styles.footerLink, { color: colors.primary, fontFamily: Fonts.sansBold }]}>

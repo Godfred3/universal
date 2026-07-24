@@ -1,6 +1,6 @@
-import { useEffect, useState, useContext } from 'react';
-import { useColorScheme as useRNColorScheme } from 'react-native';
 import { ThemeContext } from '@/context/theme-context';
+import { useContext, useEffect, useState } from 'react';
+import { useColorScheme as useRNColorScheme } from 'react-native';
 
 /**
  * To support static rendering, this value needs to be re-calculated on the client side for web
@@ -11,7 +11,11 @@ export function useColorScheme() {
   const colorScheme = useRNColorScheme();
 
   useEffect(() => {
-    setHasHydrated(true);
+    const timeoutId = setTimeout(() => {
+      setHasHydrated(true);
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
   }, []);
 
   if (!hasHydrated) {
