@@ -2,8 +2,8 @@ import { Spacing } from '@/constants/theme';
 import { useThemeContext } from '@/context/theme-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useRouter } from 'expo-router';
-import { ArrowRight, Moon, Sun } from 'lucide-react-native';
-import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ArrowRight, Globe, Moon, Sun } from 'lucide-react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LandingScreen() {
@@ -36,12 +36,11 @@ export default function LandingScreen() {
             </View>
 
             <View style={styles.content}>
-                {/* App Logo */}
-                <Image
-                    source={require('../../../assets/images/universal-chat-logo.png')}
-                    style={styles.logo}
-                    resizeMode="contain"
-                />
+                <View style={[styles.iconWrapper, { backgroundColor: colors.backgroundElement }]}>
+                    <Globe size={108} color={colors.primary} strokeWidth={1.8} />
+                </View>
+                <Text style={[styles.title, { color: colors.text }]}>Universal Chat</Text>
+                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Connect securely across every device</Text>
             </View>
 
             <TouchableOpacity
@@ -92,9 +91,31 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    logo: {
-        width: 280,
-        height: 280,
+    iconWrapper: {
+        width: 180,
+        height: 180,
+        borderRadius: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: Spacing.four,
+        shadowColor: '#000000',
+        shadowOpacity: 0.08,
+        shadowRadius: 18,
+        shadowOffset: { width: 0, height: 10 },
+        elevation: 8,
+    },
+    title: {
+        fontSize: 28,
+        fontWeight: '700',
+        marginBottom: 10,
+        fontFamily: 'System',
+    },
+    subtitle: {
+        fontSize: 16,
+        lineHeight: 22,
+        textAlign: 'center',
+        maxWidth: 260,
+        fontFamily: 'System',
     },
     button: {
         width: 60,

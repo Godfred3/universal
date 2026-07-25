@@ -2,15 +2,15 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronLeft, MoreVertical, Phone, Send, Video } from "lucide-react-native";
 import React, { useMemo } from "react";
 import {
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { Fonts } from "@/constants/theme";
@@ -148,7 +148,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     justifyContent: "center",
   },
   avatarText: {
-    color: "#fff",
+    color: theme.background,
     fontFamily: Fonts?.sansBold,
     fontSize: 16,
   },
@@ -198,7 +198,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     lineHeight: 20,
   },
   myMessageText: {
-    color: "#fff",
+    color: theme.background,
   },
   otherMessageText: {
     color: theme.text,
@@ -206,7 +206,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   timeText: {
     fontSize: 10,
     fontFamily: Fonts?.sans,
-    color: "rgba(0,0,0,0.4)",
+    color: theme.textSecondary,
     alignSelf: "flex-end",
     marginTop: 4,
   },

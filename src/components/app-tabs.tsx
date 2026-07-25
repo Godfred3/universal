@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { CircleDashed, MessageSquare, User } from 'lucide-react-native';
+import { CalendarClock, CircleDashed, HomeIcon, MessageSquare, User } from 'lucide-react-native';
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -71,13 +71,13 @@ export default function AppTabs() {
         name="index"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon Icon={MessageSquare} focused={focused} theme={theme} />
+            <TabIcon Icon={HomeIcon} focused={focused} theme={theme} />
           ),
         }}
       />
 
       
-      {/* New Chat */}
+      {/* status */}
       <Tabs.Screen
         name="status"
         options={{
@@ -87,9 +87,19 @@ export default function AppTabs() {
         }}
       />
 
-      {/* Profile */}
+      {/* Scheduled messages */}
       <Tabs.Screen
-        name="profile"
+        name="scheduling"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon Icon={CalendarClock} focused={focused} theme={theme} />
+          ),
+        }}
+      />
+
+      {/* Find Friends */}
+      <Tabs.Screen
+        name="Find_friends"
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon Icon={User} focused={focused} theme={theme} />
@@ -99,8 +109,6 @@ export default function AppTabs() {
 
 
      
-
-
     </Tabs>
   );
 }

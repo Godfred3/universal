@@ -6,35 +6,35 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Fonts } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 import {
-  AllPermissionsStatus,
-  requestAllPermissions,
-  requestCameraPermission,
-  requestContactsPermission,
-  requestMediaLibraryPermission,
-  requestMicrophonePermission,
+    AllPermissionsStatus,
+    requestAllPermissions,
+    requestCameraPermission,
+    requestContactsPermission,
+    requestMediaLibraryPermission,
+    requestMicrophonePermission,
 } from '@/hooks/use-permissions';
+import { useTheme } from '@/hooks/use-theme';
 import { useRouter } from 'expo-router';
 import {
-  BookUser,
-  Camera,
-  CheckCircle2,
-  ChevronRight,
-  HardDrive,
-  Mic,
-  ShieldCheck,
-  XCircle,
+    BookUser,
+    Camera,
+    CheckCircle2,
+    ChevronRight,
+    HardDrive,
+    Mic,
+    ShieldCheck,
+    XCircle,
 } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -275,7 +275,7 @@ const createStyles = (theme: any) =>
       gap: 14,
       borderWidth: 1.5,
       borderColor: 'transparent',
-      shadowColor: '#000',
+      shadowColor: theme.textSecondary,
       shadowOpacity: 0.05,
       shadowRadius: 8,
       shadowOffset: { width: 0, height: 2 },

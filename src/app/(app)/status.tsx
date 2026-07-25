@@ -1,542 +1,214 @@
-// app/(tabs)/status.tsx
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  Platform,
-  Modal,
-  TextInput,
-  Dimensions,
-} from "react-native";
-import {
-  Camera,
-  PenLine,
-  X,
-  Send,
-} from "lucide-react-native";
-import { useTheme } from "@/hooks/use-theme";
-import { Fonts } from "@/constants/theme";
-import { useRouter } from "expo-router";
+import { useRouter } from 'expo-router';
+import { Bell, Camera, ChevronRight, PenLine, Plus, Send } from 'lucide-react-native';
+import { useMemo, useState } from 'react';
+import { Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+import { GradientWrapper } from '@/components/gradient-wrapper';
+import { BottomTabInset, Fonts } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface StatusItem {
+type StatusUpdate = {
   id: string;
   name: string;
   initials: string;
-  bgColor: string;
+  avatar?: string;
+  colors: readonly [string, string];
+  count: number;
+  timeAgo: string;
   viewed: boolean;
-  time?: string;
-  previewText?: string;
-  statusCount: number;
-}
+  isGroup?: boolean;
+};
 
-// ─── Dummy Data ───────────────────────────────────────────────────────────────
+const VIEWED_RING = ['#D9D9E3', '#D9D9E3'] as const;
 
-const STATUSES: StatusItem[] = [
-  {
-    id: "1",
-    name: "Wofa George",
-    initials: "WG",
-    bgColor: "#2A6B3C",
-    viewed: false,
-    time: "2 min ago",
-    previewText: "Living my best life 🌿",
-    statusCount: 2,
-  },
-  {
-    id: "2",
-    name: "Mentor 🎙️",
-    initials: "ME",
-    bgColor: "#8B2252",
-    viewed: false,
-    time: "15 min ago",
-    previewText: "New podcast episode out now!",
-    statusCount: 1,
-  },
-  {
-    id: "3",
-    name: "Sarkso",
-    initials: "SK",
-    bgColor: "#1A4A7A",
-    viewed: true,
-    time: "5:00",
-    previewText: "🎵 New track dropping soon",
-    statusCount: 3,
-  },
-  {
-    id: "4",
-    name: "Larry M.",
-    initials: "LM",
-    bgColor: "#7C3A2A",
-    viewed: true,
-    time: "1 hr ago",
-    previewText: "Good morning! ☀️",
-    statusCount: 1,
-  },
-  {
-    id: "5",
-    name: "Natalie",
-    initials: "NN",
-    bgColor: "#4A2A7A",
-    viewed: false,
-    time: "30 min ago",
-    previewText: "Weekend vibes 🌴",
-    statusCount: 2,
-  },
+const STATUS_UPDATES: StatusUpdate[] = [
+  { id: 'u1', name: 'Maya Torres', initials: 'MT', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80', colors: ['#7955D9', '#4361EE'], count: 3, timeAgo: '12m', viewed: false },
+  { id: 'u2', name: 'Kwame Mensah', initials: 'KM', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80', colors: ['#3C9CA2', '#00A6A6'], count: 1, timeAgo: '38m', viewed: false },
+  { id: 'u3', name: 'Family 🏠', initials: 'F', colors: ['#4361EE', '#7955D9'], count: 5, timeAgo: '1h', viewed: false, isGroup: true },
+  { id: 'u4', name: 'Noor Ahmed', initials: 'NA', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=200&q=80', colors: ['#D28E4B', '#F5B942'], count: 2, timeAgo: '3h', viewed: true },
+  { id: 'u5', name: 'Daniel Boateng', initials: 'DB', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=200&q=80', colors: ['#E85AAD', '#7955D9'], count: 1, timeAgo: 'Yesterday', viewed: true },
 ];
 
-// ─── Card Dimensions ──────────────────────────────────────────────────────────
-
-const CARD_WIDTH = (SCREEN_WIDTH - 48 - 12) / 3.5; // 3.5 cards visible
-const CARD_HEIGHT = CARD_WIDTH * 1.72;
-
-// ─── Components ───────────────────────────────────────────────────────────────
-
-/** Individual status card (colored background, initials, name) */
-function StatusCard({ item, onPress }: { item: StatusItem; onPress: () => void }) {
-  const theme = useTheme();
-  const ringColor = item.viewed ? theme.textSecondary : theme.primary;
-
-  return (
-    <TouchableOpacity
-      style={[styles.statusCard, { width: CARD_WIDTH, height: CARD_HEIGHT }]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      {/* Full colored background */}
-      <View style={[styles.statusCardBg, { backgroundColor: item.bgColor }]} />
-
-      {/* Top: avatar with ring */}
-      <View style={styles.statusCardTop}>
-        <View style={[styles.statusRing, { borderColor: ringColor }]}>
-          <View style={[styles.statusAvatarCircle, { backgroundColor: item.bgColor }]}>
-            <Text style={styles.statusAvatarText}>{item.initials}</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Bottom: name */}
-      <View style={styles.statusCardBottom}>
-        <Text style={styles.statusCardName} numberOfLines={2}>{item.name}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-/** "Add status" card */
-function AddStatusCard({ onPress }: { onPress: () => void }) {
-  const theme = useTheme();
-  return (
-    <TouchableOpacity
-      style={[
-        styles.statusCard, 
-        styles.addStatusCard, 
-        { width: CARD_WIDTH, height: CARD_HEIGHT, backgroundColor: theme.backgroundElement }
-      ]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <View style={styles.statusCardTop}>
-        <View style={styles.addStatusAvatarWrapper}>
-          <View style={[styles.addStatusAvatar, { backgroundColor: theme.backgroundSelected }]}>
-            <Text style={{ fontSize: 20 }}>👤</Text>
-          </View>
-          <View style={[styles.addStatusPlus, { backgroundColor: theme.primary, borderColor: theme.backgroundElement }]}>
-            <Text style={{ color: "#fff", fontSize: 12, fontFamily: Fonts?.sansBold }}>+</Text>
-          </View>
-        </View>
-      </View>
-      <View style={styles.statusCardBottom}>
-        <Text style={[styles.statusCardName, { color: theme.text }]}>Add status</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ─── Modals ───────────────────────────────────────────────────────────────────
-
-/** View Status Modal */
-function ViewStatusModal({ item, visible, onClose }: {
-  item: StatusItem | null;
-  visible: boolean;
-  onClose: () => void;
-}) {
-  if (!item) return null;
-
-  return (
-    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-      <TouchableOpacity style={styles.viewOverlay} activeOpacity={1} onPress={onClose}>
-        <View style={[styles.viewCard, { backgroundColor: item.bgColor }]}>
-          {/* Progress bar */}
-          <View style={styles.progressBar}>
-            {Array.from({ length: item.statusCount }).map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.progressSegment,
-                  { backgroundColor: i === 0 ? "#fff" : "rgba(255,255,255,0.35)" },
-                ]}
-              />
-            ))}
-          </View>
-
-          {/* Header */}
-          <View style={styles.viewHeader}>
-            <View style={styles.viewHeaderLeft}>
-              <View style={styles.viewAvatar}>
-                <Text style={styles.viewAvatarText}>{item.initials}</Text>
-              </View>
-              <View>
-                <Text style={styles.viewName}>{item.name}</Text>
-                <Text style={styles.viewTime}>{item.time}</Text>
-              </View>
-            </View>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <X size={22} color="#fff" strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Status text */}
-          <View style={styles.viewContent}>
-            <Text style={styles.viewText}>{item.previewText}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
-
-/** Create Status Modal */
-function CreateStatusModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const theme = useTheme();
-  const [text, setText] = useState("");
-  const [selectedBg, setSelectedBg] = useState<string>(theme.primary);
-  const BG_OPTIONS = [theme.primary, "#6C63FF", "#F76A8C", "#F78C6A", "#6ABFF7", "#C86AF7", theme.background];
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
-        <View style={styles.modalHeader}>
-          <TouchableOpacity onPress={onClose} style={[styles.modalCloseBtn, { backgroundColor: theme.backgroundSelected }]}>
-            <X size={20} color={theme.text} strokeWidth={2} />
-          </TouchableOpacity>
-          <Text style={[styles.modalTitle, { color: theme.text }]}>New Status</Text>
-          <View style={{ width: 36 }} />
-        </View>
-
-        {/* Preview card */}
-        <View style={[styles.previewCard, { backgroundColor: selectedBg }]}>
-          <Text style={styles.previewCardText}>
-            {text.trim() ? text : "What's on your mind?"}
-          </Text>
-        </View>
-
-        {/* Color picker */}
-        <View style={styles.colorPickerRow}>
-          {BG_OPTIONS.map((color) => (
-            <TouchableOpacity
-              key={color}
-              style={[
-                styles.colorDot,
-                { backgroundColor: color },
-                selectedBg === color && { borderWidth: 3, borderColor: theme.text, transform: [{ scale: 1.18 }] },
-              ]}
-              onPress={() => setSelectedBg(color)}
-            />
-          ))}
-        </View>
-
-        {/* Text input */}
-        <View style={[styles.statusInput, { backgroundColor: theme.backgroundElement }]}>
-          <PenLine size={16} color={theme.textSecondary} strokeWidth={2} />
-          <TextInput
-            style={[styles.statusInputField, { color: theme.text, fontFamily: Fonts?.sans }]}
-            placeholder="Type your status…"
-            placeholderTextColor={theme.textSecondary}
-            value={text}
-            onChangeText={setText}
-            multiline
-            maxLength={180}
-          />
-        </View>
-        <Text style={[styles.charCount, { color: theme.textSecondary }]}>{text.length}/180</Text>
-
-        {/* Post button */}
-        <TouchableOpacity
-          style={[
-            styles.postBtn,
-            { backgroundColor: text.trim() ? theme.primary : theme.backgroundElement },
-          ]}
-          onPress={() => { onClose(); setText(""); }}
-          activeOpacity={0.85}
-        >
-          <Send size={18} color={text.trim() ? "#fff" : theme.textSecondary} strokeWidth={2} />
-          <Text style={[styles.postBtnText, { color: text.trim() ? "#fff" : theme.textSecondary }]}>
-            Post Status
-          </Text>
-        </TouchableOpacity>
-
-        {/* Add media button */}
-        <TouchableOpacity style={[styles.cameraBtn, { borderColor: theme.backgroundSelected }]} activeOpacity={0.8}>
-          <Camera size={18} color={theme.text} strokeWidth={2} />
-          <Text style={[styles.cameraBtnText, { color: theme.text }]}>Add Photo / Video</Text>
-        </TouchableOpacity>
-      </View>
-    </Modal>
-  );
-}
-
-// ─── Main Screen ──────────────────────────────────────────────────────────────
-
-export default function StatusScreen() {
-  const theme = useTheme();
+export default function UpdatesScreen() {
   const router = useRouter();
-  const [createVisible, setCreateVisible] = useState(false);
-  const [viewItem, setViewItem] = useState<StatusItem | null>(null);
+  const theme = useTheme();
+  const scheme = useColorScheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const [composer, setComposer] = useState(false);
+  const [note, setNote] = useState('');
+
+  const recent = STATUS_UPDATES.filter((u) => !u.viewed);
+  const viewed = STATUS_UPDATES.filter((u) => u.viewed);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={theme.text !== "#0D0F1E" ? "light-content" : "dark-content"} backgroundColor={theme.background} />
-
-      <ScrollView
-        style={{ flex: 1 }}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 32 }}
-      >
-        {/* Header */}
+    <View style={styles.container}>
+      <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={[styles.pageTitle, { color: theme.text }]}>Updates</Text>
-          <TouchableOpacity style={[styles.menuBtn, { backgroundColor: theme.backgroundElement }]}>
-            <Text style={{ color: theme.text, fontSize: 18, fontFamily: Fonts?.sansBold }}>⋮</Text>
-          </TouchableOpacity>
+          <View>
+            <Text style={styles.eyebrow}>UNIVERSAL</Text>
+            <Text style={styles.title}>Status</Text>
+          </View>
+          <TouchableOpacity style={styles.bell}><Bell size={19} color={theme.text} /></TouchableOpacity>
         </View>
 
-        {/* Status section */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Status</Text>
-          <View style={styles.sectionActions}>
-            <TouchableOpacity style={[styles.sectionIconBtn, { backgroundColor: theme.backgroundElement }]} onPress={() => router.push('/(public)/status_camera')}>
-              <Camera size={18} color={theme.text} strokeWidth={2} />
+        <TouchableOpacity style={styles.myStatusCard} activeOpacity={0.85} onPress={() => setComposer(true)}>
+          <View style={styles.myStatusRingWrap}>
+            <GradientWrapper colors={['#4361EE', '#7955D9']} style={styles.myStatusRing}>
+              <View style={styles.myStatusAvatarWrap}>
+                <Text style={styles.myStatusInitials}>JD</Text>
+              </View>
+            </GradientWrapper>
+            <View style={styles.myStatusAddBadge}><Plus size={13} color="#fff" strokeWidth={2.6} /></View>
+          </View>
+          <View style={styles.myStatusCopy}>
+            <Text style={styles.myStatusTitle}>My status</Text>
+            <Text style={styles.myStatusSubtitle}>Tap to share a photo, video, or write something</Text>
+          </View>
+          <View style={styles.myStatusActions}>
+            <TouchableOpacity style={styles.myStatusActionButton} onPress={() => setComposer(true)} hitSlop={8}>
+              <PenLine size={17} color={theme.primary} />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.sectionIconBtn, { backgroundColor: theme.backgroundElement }]} onPress={() => router.push('/(public)/status_text')}>
-              <PenLine size={18} color={theme.text} strokeWidth={2} />
+            <TouchableOpacity style={styles.myStatusActionButton} onPress={() => router.push('/(public)/status_camera')} hitSlop={8}>
+              <Camera size={17} color={theme.primary} />
             </TouchableOpacity>
           </View>
-        </View>
+        </TouchableOpacity>
 
-        {/* Horizontal status cards */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.statusScroll}
-        >
-          <AddStatusCard onPress={() => setCreateVisible(true)} />
-          {STATUSES.map((item) => (
-            <StatusCard
-              key={item.id}
-              item={item}
-              onPress={() => setViewItem(item)}
-            />
-          ))}
-        </ScrollView>
+        {recent.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Recent updates</Text>
+            {recent.map((update) => (
+              <StatusRow key={update.id} update={update} styles={styles} theme={theme} />
+            ))}
+          </>
+        )}
+
+        {viewed.length > 0 && (
+          <>
+            <Text style={[styles.sectionTitle, { marginTop: 26 }]}>Viewed updates</Text>
+            {viewed.map((update) => (
+              <StatusRow key={update.id} update={update} styles={styles} theme={theme} />
+            ))}
+          </>
+        )}
       </ScrollView>
 
-      {/* Modals */}
-      <CreateStatusModal visible={createVisible} onClose={() => setCreateVisible(false)} />
-      <ViewStatusModal item={viewItem} visible={!!viewItem} onClose={() => setViewItem(null)} />
+      <Modal visible={composer} animationType="slide" transparent onRequestClose={() => setComposer(false)}>
+        <View style={styles.overlay}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <View>
+                <Text style={styles.sheetTitle}>New status</Text>
+                <Text style={styles.sheetSub}>Visible to your contacts for 24 hours.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setComposer(false)}><Text style={styles.cancel}>Cancel</Text></TouchableOpacity>
+            </View>
+            <View style={styles.noteBox}>
+              <PenLine size={18} color={theme.textSecondary} style={{ marginTop: 13 }} />
+              <TextInput autoFocus multiline value={note} onChangeText={setNote} placeholder="What's on your mind?" placeholderTextColor={theme.textSecondary} style={styles.noteInput} />
+            </View>
+            <TouchableOpacity style={[styles.postButton, !note.trim() && { opacity: 0.45 }]} onPress={() => { if (note.trim()) { setNote(''); setComposer(false); } }}>
+              <Send size={18} color="#fff" />
+              <Text style={styles.postText}>Post status</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <View style={styles.fabStack}>
+        <TouchableOpacity style={styles.editFab} onPress={() => setComposer(true)}>
+          <PenLine size={18} color={theme.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.cameraFab} onPress={() => router.push('/(public)/status_camera')}>
+          <Camera size={22} color="#fff" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+function StatusRow({ update, styles, theme }: { update: StatusUpdate; styles: ReturnType<typeof createStyles>; theme: ReturnType<typeof useTheme> }) {
+  return (
+    <TouchableOpacity style={styles.updateRow} activeOpacity={0.75}>
+      <View style={styles.updateRingWrap}>
+        <GradientWrapper colors={update.viewed ? VIEWED_RING : update.colors} style={styles.updateRing}>
+          <View style={styles.updateAvatarWrap}>
+            {update.avatar ? (
+              <Text style={styles.updateInitials}>{update.initials}</Text>
+            ) : (
+              <Text style={styles.updateInitials}>{update.initials}</Text>
+            )}
+          </View>
+        </GradientWrapper>
+        <View style={styles.updateCountBadge}><Text style={styles.updateCountText}>{update.count}</Text></View>
+      </View>
+      <View style={styles.updateCopy}>
+        <Text style={styles.updateName}>{update.name}</Text>
+        <Text style={styles.updateMeta}>{update.count} update{update.count > 1 ? 's' : ''} · {update.timeAgo}</Text>
+      </View>
+      <ChevronRight size={18} color={theme.textSecondary} />
+    </TouchableOpacity>
+  );
+}
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
+const createStyles = (theme: ReturnType<typeof useTheme>) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.background },
+  content: { paddingTop: Platform.OS === 'ios' ? 58 : 44, paddingBottom: BottomTabInset + 40 },
+  header: { paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  eyebrow: { color: theme.primary, fontFamily: Fonts?.sansBold, fontSize: 10, letterSpacing: 1.5 },
+  title: { color: theme.text, fontFamily: Fonts?.sansExtraBold, fontSize: 35, letterSpacing: -1.2 },
+  bell: { width: 43, height: 43, borderRadius: 15, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center' },
 
-  // Header
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 18,
-    paddingTop: Platform.OS === "ios" ? 60 : 48,
-    paddingBottom: 8,
+  myStatusCard: {
+    marginHorizontal: 24,
+    marginTop: 22,
+    padding: 16,
+    borderRadius: 26,
+    backgroundColor: theme.backgroundElement,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
   },
-  pageTitle: {
-    fontSize: 34,
-    fontFamily: Fonts?.sansExtraBold,
-    letterSpacing: -0.5,
-  },
-  menuBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  myStatusRingWrap: { position: 'relative' },
+  myStatusRing: { width: 72, height: 72, borderRadius: 26, padding: 3, alignItems: 'center', justifyContent: 'center' },
+  myStatusAvatarWrap: { width: '100%', height: '100%', borderRadius: 23, backgroundColor: theme.background, alignItems: 'center', justifyContent: 'center' },
+  myStatusInitials: { color: theme.text, fontFamily: Fonts?.sansExtraBold, fontSize: 20 },
+  myStatusAddBadge: { position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderRadius: 12, backgroundColor: theme.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: theme.backgroundElement },
+  myStatusCopy: { flex: 1 },
+  myStatusTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 17 },
+  myStatusSubtitle: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12, marginTop: 4, lineHeight: 17 },
+  myStatusActions: { gap: 10 },
+  myStatusActionButton: { width: 36, height: 36, borderRadius: 12, backgroundColor: theme.background, alignItems: 'center', justifyContent: 'center' },
 
-  // Section headers
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    marginTop: 24,
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontFamily: Fonts?.sansBold,
-  },
-  sectionActions: { flexDirection: "row", gap: 10 },
-  sectionIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  sectionTitle: { paddingHorizontal: 24, marginTop: 26, marginBottom: 10, color: theme.textSecondary, fontFamily: Fonts?.sansBold, fontSize: 12.5, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  // Status horizontal scroll
-  statusScroll: {
-    paddingHorizontal: 18,
-    gap: 10,
-  },
+  updateRow: { marginHorizontal: 24, marginBottom: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 13 },
+  updateRingWrap: { position: 'relative' },
+  updateRing: { width: 60, height: 60, borderRadius: 21, padding: 2.5, alignItems: 'center', justifyContent: 'center' },
+  updateAvatarWrap: { width: '100%', height: '100%', borderRadius: 18, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  updateInitials: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 14 },
+  updateCountBadge: { position: 'absolute', bottom: -3, right: -3, minWidth: 20, height: 20, paddingHorizontal: 4, borderRadius: 10, backgroundColor: theme.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: theme.background },
+  updateCountText: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 10 },
+  updateCopy: { flex: 1 },
+  updateName: { color: theme.text, fontFamily: Fonts?.sansSemiBold, fontSize: 15 },
+  updateMeta: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12, marginTop: 3 },
 
-  // Status card
-  statusCard: {
-    borderRadius: 14,
-    overflow: "hidden",
-    justifyContent: "space-between",
-  },
-  statusCardBg: {
-    ...StyleSheet.absoluteFill,
-    opacity: 0.85,
-  },
-  statusCardTop: {
-    padding: 10,
-    alignItems: "flex-start",
-  },
-  statusRing: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    borderWidth: 2.5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statusAvatarCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statusAvatarText: {
-    color: "#fff",
-    fontFamily: Fonts?.sansBold,
-    fontSize: 13,
-  },
-  statusCardBottom: {
-    padding: 10,
-    paddingBottom: 12,
-  },
-  statusCardName: {
-    color: "#fff",
-    fontSize: 13,
-    fontFamily: Fonts?.sansBold,
-    lineHeight: 17,
-    textShadowColor: "rgba(0,0,0,0.6)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
+  fabStack: { position: 'absolute', right: 24, bottom: BottomTabInset + 10, alignItems: 'center', gap: 12 },
+  editFab: { width: 46, height: 46, borderRadius: 17, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
+  cameraFab: { width: 58, height: 58, borderRadius: 21, backgroundColor: theme.primary, alignItems: 'center', justifyContent: 'center', shadowColor: theme.primary, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 7 },
 
-  // Add status card
-  addStatusCard: {
-    justifyContent: "space-between",
-  },
-  addStatusAvatarWrapper: {
-    alignItems: "flex-start",
-  },
-  addStatusAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addStatusPlus: {
-    position: "absolute",
-    bottom: -2,
-    right: -4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-  },
-
-  // Create Modal
-  modalContainer: { flex: 1, paddingHorizontal: 24, paddingTop: Platform.OS === "ios" ? 20 : 16 },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 24,
-  },
-  modalCloseBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  modalTitle: { fontSize: 17, fontFamily: Fonts?.sansBold },
-  previewCard: {
-    height: 200, borderRadius: 20,
-    alignItems: "center", justifyContent: "center",
-    paddingHorizontal: 24, marginBottom: 16,
-  },
-  previewCardText: { color: "#fff", fontSize: 18, fontFamily: Fonts?.sansBold, textAlign: "center" },
-  colorPickerRow: { flexDirection: "row", gap: 10, justifyContent: "center", marginBottom: 20 },
-  colorDot: { width: 28, height: 28, borderRadius: 14 },
-  statusInput: {
-    flexDirection: "row", alignItems: "flex-start",
-    borderRadius: 16, padding: 16, gap: 10, minHeight: 100,
-  },
-  statusInputField: { flex: 1, fontSize: 15, lineHeight: 22 },
-  charCount: { fontSize: 11, textAlign: "right", marginTop: 6, marginBottom: 20, fontFamily: Fonts?.sans },
-  postBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 10, height: 52, borderRadius: 26, marginBottom: 12,
-  },
-  postBtnText: { fontSize: 16, fontFamily: Fonts?.sansBold },
-  cameraBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, height: 50, borderRadius: 26, borderWidth: 1.5,
-  },
-  cameraBtnText: { fontSize: 15, fontFamily: Fonts?.sansSemiBold },
-
-  // View Status Modal
-  viewOverlay: {
-    flex: 1, backgroundColor: "rgba(0,0,0,0.85)",
-    alignItems: "center", justifyContent: "center", padding: 24,
-  },
-  viewCard: { width: "100%", height: 480, borderRadius: 28, padding: 20, overflow: "hidden" },
-  progressBar: { flexDirection: "row", gap: 4, marginBottom: 16 },
-  progressSegment: { flex: 1, height: 3, borderRadius: 2 },
-  viewHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  viewHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  viewAvatar: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    alignItems: "center", justifyContent: "center",
-  },
-  viewAvatarText: { color: "#fff", fontFamily: Fonts?.sansBold, fontSize: 14 },
-  viewName: { color: "#fff", fontFamily: Fonts?.sansBold, fontSize: 15 },
-  viewTime: { color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: 1, fontFamily: Fonts?.sans },
-  viewContent: { flex: 1, alignItems: "center", justifyContent: "center" },
-  viewText: { color: "#fff", fontSize: 22, fontFamily: Fonts?.sansBold, textAlign: "center", lineHeight: 32 },
+  overlay: { flex: 1, backgroundColor: 'rgba(3, 7, 18, 0.35)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: theme.background, padding: 24, paddingBottom: 36, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
+  sheetHandle: { width: 38, height: 4, borderRadius: 3, backgroundColor: theme.backgroundSelected, alignSelf: 'center', marginBottom: 19 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  sheetTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 19 },
+  sheetSub: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12, marginTop: 3 },
+  cancel: { color: theme.primary, fontFamily: Fonts?.sansSemiBold, fontSize: 13 },
+  noteBox: { minHeight: 125, backgroundColor: theme.backgroundElement, borderRadius: 18, marginTop: 19, flexDirection: 'row', paddingHorizontal: 14, gap: 10 },
+  noteInput: { flex: 1, color: theme.text, fontFamily: Fonts?.sans, fontSize: 15, textAlignVertical: 'top', paddingTop: 13, paddingBottom: 13 },
+  postButton: { marginTop: 16, height: 52, borderRadius: 18, backgroundColor: theme.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  postText: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 15 },
 });

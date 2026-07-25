@@ -1,646 +1,462 @@
-// app/(tabs)/chats.tsx
-import { useRouter } from "expo-router";
-import {
-    MessageSquare,
-    Mic,
-    MoreVertical,
-    Pin,
-    Plus,
-    RefreshCw,
-    Search,
-    Users
-} from "lucide-react-native";
-import { useMemo, useState } from "react";
-import {
-    FlatList,
-    Modal,
-    Platform,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
-} from "react-native";
+import { useRouter } from 'expo-router';
+import { Bookmark, Camera, CheckCircle2, Heart, MessageCircle, MoreHorizontal, Plus, Search, Share2, Sparkles } from 'lucide-react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Dimensions, FlatList, Image, Pressable, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BottomTabInset, Fonts } from "@/constants/theme";
-import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useTheme } from "@/hooks/use-theme";
+import { GradientWrapper } from '@/components/gradient-wrapper';
+import { BottomTabInset, Fonts } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+type ReactionType = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
 
-type Tab = "All Chats" | "Groups";
+type Story = { id: string; name: string; initials: string; color: string; own?: boolean; seen?: boolean; avatar?: string };
 
-interface ChatItem {
+type Pulse = {
   id: string;
-  name: string;
-  preview: string;
-  time: string;
-  avatar: string; // initials fallback
-  unread?: number;
-  pinned?: boolean;
-  previewType?: "text" | "voice" | "sticker" | "typing" | "sync";
-  online?: boolean;
-}
-
-// ─── Dummy Data ───────────────────────────────────────────────────────────────
-
-const CHATS: ChatItem[] = [
-  {
-    id: "1",
-    name: "Larry Machigo",
-    preview: "Ok, Let me check",
-    time: "09:38 AM",
-    avatar: "LM",
-    pinned: true,
-    online: true,
-  },
-  {
-    id: "2",
-    name: "Natalie Nora",
-    preview: "Natalie is typing...",
-    time: "",
-    avatar: "NN",
-    unread: 2,
-    previewType: "typing",
-  },
-  {
-    id: "3",
-    name: "Jennifer Jones",
-    preview: "Voice message",
-    time: "02:03 AM",
-    avatar: "JJ",
-    previewType: "voice",
-  },
-  {
-    id: "4",
-    name: "Larry Machigo",
-    preview: "See you tomorrow, take...",
-    time: "Yesterday",
-    avatar: "LM",
-  },
-  {
-    id: "5",
-    name: "Sofia",
-    preview: "Oh... thank you so...",
-    time: "26 May",
-    avatar: "SO",
-  },
-  {
-    id: "6",
-    name: "Haider Lve",
-    preview: "Sticker",
-    time: "12 Jun",
-    avatar: "HL",
-    previewType: "sticker",
-  },
-  {
-    id: "7",
-    name: "Mr. Elon",
-    preview: "Cool -))",
-    time: "11 Jun",
-    avatar: "ME",
-    previewType: "sync",
-  },
-];
-
-// Avatar colour palette — cycles through
-const AVATAR_COLORS = [
-  "#7C6AF7",
-  "#F78C6A",
-  "#6ABFF7",
-  "#F76A8C",
-  "#6AF7C8",
-  "#C86AF7",
-  "#F7C86A",
-];
-
-function avatarColor(index: number) {
-  return AVATAR_COLORS[index % AVATAR_COLORS.length];
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function Avatar({
-  initials,
-  colorIndex,
-  size = 52,
-}: {
+  author: string;
   initials: string;
-  colorIndex: number;
-  size?: number;
-}) {
-  return (
-    <View
-      style={[
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: avatarColor(colorIndex),
-          alignItems: "center",
-          justifyContent: "center",
-        },
-      ]}
-    >
-      <Text style={{
-        color: "#fff",
-        fontWeight: "700",
-        fontSize: size * 0.33,
-        fontFamily: Fonts?.sansBold
-      }}>
-        {initials}
-      </Text>
-    </View>
-  );
-}
+  avatar?: string;
+  ago: string;
+  text: string;
+  images?: string[];
+  likes: number;
+  likedBy: string[];
+  comments: number;
+  topComment?: { author: string; text: string };
+  reaction: ReactionType | null;
+  color: string;
+  channel?: string;
+};
 
-function PreviewText({ item, styles }: { item: ChatItem, styles: any }) {
-  const theme = useTheme();
-  if (item.previewType === "typing") {
-    return <Text style={styles.typingText}>{item.preview}</Text>;
-  }
-  if (item.previewType === "voice") {
-    return (
-      <View style={styles.previewRow}>
-        <Mic size={13} color={theme.textSecondary} strokeWidth={2} />
-        <Text style={[styles.previewText, { marginLeft: 4 }]}>
-          {item.preview}
-        </Text>
-      </View>
-    );
-  }
-  if (item.previewType === "sticker") {
-    return (
-      <View style={styles.previewRow}>
-        <Text style={{ fontSize: 13 }}>🎨 </Text>
-        <Text style={styles.previewText}>{item.preview}</Text>
-      </View>
-    );
-  }
-  if (item.previewType === "sync") {
-    return (
-      <View style={styles.previewRow}>
-        <RefreshCw size={13} color={theme.textSecondary} strokeWidth={2} />
-        <Text style={[styles.previewText, { marginLeft: 4 }]}>
-          {item.preview}
-        </Text>
-      </View>
-    );
-  }
-  return <Text style={styles.previewText} numberOfLines={1}>{item.preview}</Text>;
-}
+const REACTIONS: { type: ReactionType; emoji: string; label: string; color: string }[] = [
+  { type: 'like', emoji: '👍', label: 'Like', color: '#5E8BFF' },
+  { type: 'love', emoji: '❤️', label: 'Love', color: '#E85AAD' },
+  { type: 'haha', emoji: '😆', label: 'Haha', color: '#F5B942' },
+  { type: 'wow', emoji: '😮', label: 'Wow', color: '#F5B942' },
+  { type: 'sad', emoji: '😢', label: 'Sad', color: '#5E8BFF' },
+  { type: 'angry', emoji: '😡', label: 'Angry', color: '#E8503A' },
+];
 
-/** Modal for starting a new chat or group */
-function NewChatModal({
-  visible,
-  onClose,
-}: {
-  visible: boolean;
-  onClose: () => void;
-}) {
-  const theme = useTheme();
-  const router = useRouter();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+const STORIES: Story[] = [
+  { id: 's0', name: 'Your pulse', initials: '+', color: '#6D5DFB', own: true },
+  { id: 's1', name: 'Maya', initials: 'MC', color: '#E85AAD', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80' },
+  { id: 's2', name: 'Kwame', initials: 'KM', color: '#00A6A6', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80' },
+  { id: 's3', name: 'Aisha', initials: 'AO', color: '#F59E55', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=200&q=80', seen: true },
+  { id: 's4', name: 'Nora', initials: 'NS', color: '#5E8BFF', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80' },
+  { id: 's5', name: 'Daniel', initials: 'DB', color: '#7B5CFA', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=200&q=80', seen: true },
+];
 
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <View style={styles.modalContent}>
-          <TouchableOpacity
-            style={styles.modalOption}
-            activeOpacity={0.7}
-            onPress={() => {
-              onClose();
-              router.push('/(public)/new_chat');
-            }}
-          >
-            <View style={[styles.modalIconContainer, { backgroundColor: theme.primary + "15" }]}>
-              <MessageSquare size={18} color={theme.primary} />
-            </View>
-            <Text style={styles.modalOptionText}>New Chat</Text>
-          </TouchableOpacity>
+const INITIAL_PULSES: Pulse[] = [
+  {
+    id: '1',
+    author: 'Maya Chen',
+    initials: 'MC',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80',
+    ago: '12m',
+    channel: 'Weekend Circle',
+    text: 'Sunrise walks, no rush, and a coffee that tastes like a small holiday. This is the energy I am taking into the weekend.',
+    images: [
+      'https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=900&q=80',
+    ],
+    likes: 284,
+    likedBy: ['Sarah Osei', 'Daniel Boateng'],
+    comments: 26,
+    topComment: { author: 'Daniel', text: 'This looks so peaceful 😍' },
+    reaction: 'love',
+    color: '#E85AAD',
+  },
+  {
+    id: '2',
+    author: 'Kwame Mensah',
+    initials: 'KM',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+    ago: '41m',
+    channel: 'Design Dispatch',
+    text: 'I made a tiny collection of interface details that make a product feel calmer. The best ones almost disappear.',
+    likes: 91,
+    likedBy: ['Nora Sarpong'],
+    comments: 11,
+    topComment: { author: 'Nora', text: 'Saving this whole thread' },
+    reaction: null,
+    color: '#00A6A6',
+  },
+  {
+    id: '3',
+    author: 'Aisha Okafor',
+    initials: 'AO',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=200&q=80',
+    ago: '2h',
+    channel: 'Travel Notes',
+    text: 'The city feels softer after rain. Saving this corner for later.',
+    images: ['https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=900&q=80'],
+    likes: 412,
+    likedBy: ['Maya Chen', 'Kwame Mensah'],
+    comments: 39,
+    reaction: null,
+    color: '#F59E55',
+  },
+];
 
-          <TouchableOpacity
-            style={styles.modalOption}
-            activeOpacity={0.7}
-            onPress={() => {
-              onClose();
-              router.push('/(public)/new_group');
-            }}
-          >
-            <View style={[styles.modalIconContainer, { backgroundColor: theme.primary + "15" }]}>
-              <Users size={18} color={theme.primary} />
-            </View>
-            <Text style={styles.modalOptionText}>New Group</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
+const gradient = ['#5E5CE6', '#7B5CFA', '#E85AAD'] as const;
+const SEEN_RING = ['#D9D9E3', '#D9D9E3'] as const;
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const CAROUSEL_WIDTH = SCREEN_WIDTH - 70;
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
-
-export default function ChatsScreen() {
+export default function PulseHomeScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const colorScheme = useColorScheme();
-  const [activeTab, setActiveTab] = useState<Tab>("All Chats");
-  const [searchVisible, setSearchVisible] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [fabModalVisible, setFabModalVisible] = useState(false);
-
+  const scheme = useColorScheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const [pulses, setPulses] = useState(INITIAL_PULSES);
+  const [stories, setStories] = useState(STORIES);
+  const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const visiblePulses = pulses.filter((pulse) => `${pulse.author} ${pulse.channel} ${pulse.text}`.toLowerCase().includes(query.toLowerCase()));
 
-  const tabs: Tab[] = ["All Chats", "Groups"];
+  const toggleReaction = (id: string, type: ReactionType) =>
+    setPulses((items) =>
+      items.map((pulse) => {
+        if (pulse.id !== id) return pulse;
+        if (pulse.reaction === type) return { ...pulse, reaction: null, likes: pulse.likes - 1 };
+        return { ...pulse, reaction: type, likes: pulse.reaction ? pulse.likes : pulse.likes + 1 };
+      }),
+    );
 
-  const filtered = CHATS.filter((c) =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const doubleTapLike = (id: string) =>
+    setPulses((items) =>
+      items.map((pulse) => {
+        if (pulse.id !== id || pulse.reaction === 'love') return pulse;
+        return { ...pulse, reaction: 'love', likes: pulse.reaction ? pulse.likes : pulse.likes + 1 };
+      }),
+    );
 
-  function openChat(item: ChatItem) {
-    router.push({
-      pathname: "/(chat)/[id]",
-      params: { id: item.id, name: item.name, initials: item.avatar },
-    });
-  }
+  const markStorySeen = (story: Story) => {
+    if (story.own) return;
+    setStories((items) => items.map((s) => (s.id === story.id ? { ...s, seen: true } : s)));
+  };
 
   return (
-    <View style={styles.container}>
-      <StatusBar
-        barStyle={colorScheme === 'dark' ? "light-content" : "dark-content"}
-        backgroundColor={theme.background}
-      />
-
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.helloText}>Hello,</Text>
-          <Text style={styles.nameText}>Johan</Text>
-        </View>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => setSearchVisible((v) => !v)}
-          >
-            <Search size={18} color={theme.text} strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn}>
-            <MoreVertical size={18} color={theme.text} strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ── Search bar ── */}
-      {searchVisible && (
-        <View style={styles.searchBar}>
-          <Search size={16} color={theme.textSecondary} strokeWidth={2} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search chats…"
-            placeholderTextColor={theme.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoFocus
-          />
-        </View>
-      )}
-
-      {/* ── Tabs ── */}
-      <View style={styles.tabRow}>
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab && styles.tabTextActive,
-              ]}
-            >
-              {tab}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* ── Chat List ── */}
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
       <FlatList
-        data={filtered}
+        data={visiblePulses}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.feed}
+        ListHeaderComponent={
+          <>
+            <View style={styles.header}>
+              <TouchableOpacity style={styles.profileChip} onPress={() => router.push('/(public)/profile')}><GradientWrapper colors={gradient} style={styles.profileGradient}><Text style={styles.profileInitials}>JD</Text></GradientWrapper></TouchableOpacity>
+              <View style={styles.brand}><View style={styles.brandRow}><View style={styles.brandDot} /><Text style={styles.brandName}>Universal</Text></View><Text style={styles.brandSub}>Universal Chat</Text></View>
+              <TouchableOpacity style={styles.inboxButton} onPress={() => router.push('/(chat)/Main_chat')}><MessageCircle size={20} color={theme.text} /><View style={styles.inboxBadge}><Text style={styles.inboxBadgeText}>3</Text></View></TouchableOpacity>
+            </View>
+
+            {searching ? <View style={styles.searchBox}><Search size={18} color={theme.textSecondary} /><TextInput autoFocus value={query} onChangeText={setQuery} placeholder="Find people, circles, ideas" placeholderTextColor={theme.textSecondary} style={styles.searchInput} /></View> : null}
+            <View style={styles.actionRow}><TouchableOpacity style={styles.searchAction} onPress={() => setSearching((open) => !open)}><Search size={18} color={theme.primary} /><Text style={styles.searchActionText}>{searching ? 'Close search' : 'Explore your circles'}</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.scheduleAction} onPress={() => router.push('/(app)/scheduling')}><Sparkles size={17} color={theme.secondary} /></TouchableOpacity></View>
+
+            <View style={styles.storiesHeader}><Text style={styles.sectionTitle}>Moments</Text><Text style={styles.sectionLink}>Close friends</Text></View>
+            <FlatList
+              horizontal
+              data={stories}
+              keyExtractor={(item) => item.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.stories}
+              renderItem={({ item, index }) => (
+                <StoryItem
+                  item={item}
+                  index={index}
+                  styles={styles}
+                  onPress={() => {
+                    markStorySeen(item);
+                    if (item.own) router.push('/(app)/status');
+                  }}
+                />
+              )}
+            />
+
+            <TouchableOpacity style={styles.shareCard} activeOpacity={0.86} onPress={() => router.push('/(app)/status')}><View style={styles.shareAvatar}><Text style={styles.shareAvatarText}>JD</Text></View><Text style={styles.sharePrompt}>Share something with your circle</Text><View style={styles.shareCamera}><Camera size={17} color={theme.primary} /></View></TouchableOpacity>
+            <View style={styles.feedTitleRow}><View><Text style={styles.sectionTitle}>Your feed</Text><Text style={styles.feedHint}>Fresh from the people and channels you follow</Text></View><TouchableOpacity><MoreHorizontal size={22} color={theme.textSecondary} /></TouchableOpacity></View>
+          </>
+        }
         renderItem={({ item, index }) => (
-          <TouchableOpacity
-            style={styles.chatRow}
-            onPress={() => openChat(item)}
-            activeOpacity={0.7}
-          >
-            <View style={{ position: "relative" }}>
-              <Avatar initials={item.avatar} colorIndex={index} />
-              {item.online && <View style={[styles.onlineDot, { borderColor: theme.background }]} />}
-            </View>
-
-            <View style={styles.chatInfo}>
-              <View style={styles.chatTopRow}>
-                <View style={styles.nameRow}>
-                  <Text style={styles.chatName}>{item.name}</Text>
-                  {item.pinned && (
-                    <Pin
-                      size={12}
-                      color={theme.primary}
-                      strokeWidth={2}
-                      style={{ marginLeft: 4, transform: [{ rotate: "45deg" }] }}
-                    />
-                  )}
-                </View>
-                <Text style={styles.timeText}>{item.time}</Text>
-              </View>
-              <View style={styles.chatBottomRow}>
-                <View style={{ flex: 1 }}>
-                  <PreviewText item={item} styles={styles} />
-                </View>
-                {item.unread ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{item.unread}</Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-          </TouchableOpacity>
+          <PulseCard
+            item={item}
+            index={index}
+            styles={styles}
+            theme={theme}
+            onToggleReaction={(type) => toggleReaction(item.id, type)}
+            onDoubleTapLike={() => doubleTapLike(item.id)}
+          />
         )}
+        ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
       />
-
-      {/* ── FAB ── */}
-      <TouchableOpacity
-        style={styles.fab}
-        activeOpacity={0.85}
-        onPress={() => setFabModalVisible(true)}
-      >
-        <Plus size={28} color="#fff" strokeWidth={2.5} />
-      </TouchableOpacity>
-
-      {/* ── Modals ── */}
-      <NewChatModal
-        visible={fabModalVisible}
-        onClose={() => setFabModalVisible(false)}
-      />
-    </View>
+      <TouchableOpacity style={styles.fab} activeOpacity={0.9} onPress={() => router.push('/(public)/new_chat')}><GradientWrapper colors={gradient} style={styles.fabGradient}><Plus size={25} color="#fff" strokeWidth={2.6} /></GradientWrapper></TouchableOpacity>
+    </SafeAreaView>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ---------- Moments / Stories ----------
 
-const createStyles = (theme: any) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.background,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === "ios" ? 60 : 48,
-    paddingBottom: 16,
-  },
-  helloText: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    fontFamily: Fonts?.sansMedium,
-  },
-  nameText: {
-    fontSize: 28,
-    color: theme.text,
-    letterSpacing: -0.5,
-    fontFamily: Fonts?.sansExtraBold,
-  },
-  headerIcons: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.backgroundElement,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 24,
-    marginBottom: 12,
-    backgroundColor: theme.backgroundElement,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: theme.text,
-    fontFamily: Fonts?.sans,
-  },
-  tabRow: {
-    flexDirection: "row",
-    marginHorizontal: 24,
-    backgroundColor: theme.backgroundElement,
-    borderRadius: 30,
-    padding: 4,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 9,
-    alignItems: "center",
-    borderRadius: 26,
-  },
-  tabActive: {
-    backgroundColor: theme.primary,
-    shadowColor: theme.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  tabText: {
-    fontSize: 13,
-    color: theme.textSecondary,
-    fontFamily: Fonts?.sansSemiBold,
-  },
-  tabTextActive: {
-    color: "#fff",
-  },
-  chatRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    gap: 14,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: theme.backgroundElement,
-    marginLeft: 90,
-  },
-  avatar: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: "#fff",
-    fontFamily: Fonts?.sansBold,
-  },
-  onlineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#4CD964",
-    position: "absolute",
-    bottom: 1,
-    right: 1,
-    borderWidth: 2,
-  },
-  chatInfo: {
-    flex: 1,
-  },
-  chatTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  nameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  chatName: {
-    fontSize: 15,
-    color: theme.text,
-    fontFamily: Fonts?.sansBold,
-  },
-  timeText: {
-    fontSize: 12,
-    color: theme.textSecondary,
-    fontFamily: Fonts?.sans,
-  },
-  chatBottomRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  previewText: {
-    fontSize: 13,
-    color: theme.textSecondary,
-    flex: 1,
-    fontFamily: Fonts?.sans,
-  },
-  typingText: {
-    fontSize: 13,
-    color: theme.primary,
-    fontStyle: "italic",
-    fontFamily: Fonts?.sans,
-  },
-  previewRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  badge: {
-    backgroundColor: theme.primary,
-    borderRadius: 12,
-    minWidth: 22,
-    height: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 6,
-  },
-  badgeText: {
-    color: "#fff",
-    fontSize: 11,
-    fontFamily: Fonts?.sansBold,
-  },
-  fab: {
-    position: "absolute",
-    bottom: 24 + BottomTabInset,
-    right: 24,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: theme.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: theme.primary,
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.2)",
-    justifyContent: "flex-end",
-    alignItems: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: theme.backgroundElement,
-    borderRadius: 16,
-    padding: 8,
-    marginRight: 24,
-    marginBottom: 90 + BottomTabInset,
-    width: 180,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-  modalOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    gap: 12,
-  },
-  modalIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalOptionText: {
-    fontSize: 15,
-    color: theme.text,
-    fontFamily: Fonts?.sansMedium,
-  },
+function StoryItem({ item, index, styles, onPress }: { item: Story; index: number; styles: ReturnType<typeof createStyles>; onPress: () => void }) {
+  const entranceOpacity = useRef(new Animated.Value(0)).current;
+  const entranceScale = useRef(new Animated.Value(0.75)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.timing(entranceOpacity, { toValue: 1, duration: 360, delay: index * 65, useNativeDriver: true }).start();
+    Animated.spring(entranceScale, { toValue: 1, delay: index * 65, friction: 6, tension: 60, useNativeDriver: true }).start();
+  }, []);
+
+  useEffect(() => {
+    if (item.own || item.seen) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.08, duration: 950, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 950, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [item.own, item.seen]);
+
+  const pressIn = () => Animated.spring(pressScale, { toValue: 0.92, useNativeDriver: true, friction: 5 }).start();
+  const pressOut = () => Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, friction: 5 }).start();
+
+  return (
+    <Animated.View style={{ opacity: entranceOpacity, transform: [{ scale: entranceScale }] }}>
+      <Pressable onPress={onPress} onPressIn={pressIn} onPressOut={pressOut}>
+        <Animated.View style={[styles.story, { transform: [{ scale: Animated.multiply(pulse, pressScale) }] }]}>
+          <GradientWrapper colors={item.own ? gradient : item.seen ? SEEN_RING : [item.color, `${item.color}99`]} style={styles.storyRing}>
+            <View style={styles.storyAvatarWrap}>
+              {item.avatar ? (
+                <Image source={{ uri: item.avatar }} style={styles.storyAvatarImage} />
+              ) : (
+                <View style={[styles.storyAvatar, { backgroundColor: item.color }]}>
+                  <Text style={styles.storyInitials}>{item.initials}</Text>
+                </View>
+              )}
+            </View>
+          </GradientWrapper>
+          <Text style={styles.storyName} numberOfLines={1}>{item.name}</Text>
+          {item.own && <View style={styles.addStory}><Plus size={11} color="#fff" /></View>}
+        </Animated.View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ---------- Feed card ----------
+
+function PulseCard({
+  item,
+  index,
+  styles,
+  theme,
+  onToggleReaction,
+  onDoubleTapLike,
+}: {
+  item: Pulse;
+  index: number;
+  styles: ReturnType<typeof createStyles>;
+  theme: ReturnType<typeof useTheme>;
+  onToggleReaction: (type: ReactionType) => void;
+  onDoubleTapLike: () => void;
+}) {
+  const [activeImage, setActiveImage] = useState(0);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const lastTap = useRef(0);
+
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  const cardTranslate = useRef(new Animated.Value(18)).current;
+  const heartScale = useRef(new Animated.Value(0)).current;
+  const heartOpacity = useRef(new Animated.Value(0)).current;
+  const likeButtonScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.timing(cardOpacity, { toValue: 1, duration: 420, delay: Math.min(index, 4) * 70, useNativeDriver: true }).start();
+    Animated.spring(cardTranslate, { toValue: 0, delay: Math.min(index, 4) * 70, friction: 8, tension: 50, useNativeDriver: true }).start();
+  }, []);
+
+  const bounceLikeButton = () => {
+    likeButtonScale.setValue(0.85);
+    Animated.spring(likeButtonScale, { toValue: 1, friction: 4, tension: 120, useNativeDriver: true }).start();
+  };
+
+  const burstHeart = () => {
+    heartScale.setValue(0);
+    heartOpacity.setValue(1);
+    Animated.sequence([
+      Animated.spring(heartScale, { toValue: 1.1, friction: 4, tension: 120, useNativeDriver: true }),
+      Animated.timing(heartScale, { toValue: 1, duration: 120, useNativeDriver: true }),
+      Animated.delay(280),
+      Animated.timing(heartOpacity, { toValue: 0, duration: 220, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const handleImagePress = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 280) {
+      onDoubleTapLike();
+      burstHeart();
+    }
+    lastTap.current = now;
+  };
+
+  const handleReactionPress = () => {
+    if (pickerVisible) {
+      setPickerVisible(false);
+      return;
+    }
+    bounceLikeButton();
+    onToggleReaction('like');
+  };
+
+  const handleReactionLongPress = () => setPickerVisible(true);
+
+  const activeReaction = REACTIONS.find((r) => r.type === item.reaction);
+  const others = Math.max(item.likes - item.likedBy.length, 0);
+
+  return (
+    <Animated.View style={{ opacity: cardOpacity, transform: [{ translateY: cardTranslate }] }}>
+      <View style={styles.pulseCard}>
+        <View style={styles.pulseHeader}>
+          {item.avatar ? (
+            <Image source={{ uri: item.avatar }} style={styles.authorAvatarImage} />
+          ) : (
+            <View style={[styles.authorAvatar, { backgroundColor: item.color }]}><Text style={styles.authorInitials}>{item.initials}</Text></View>
+          )}
+          <View style={styles.authorCopy}>
+            <View style={styles.authorNameRow}><Text style={styles.authorName}>{item.author}</Text><CheckCircle2 size={13} color={theme.primary} fill={theme.primary} /></View>
+            <Text style={styles.pulseMeta}>{item.ago} · {item.channel}</Text>
+          </View>
+          <TouchableOpacity><MoreHorizontal size={21} color={theme.textSecondary} /></TouchableOpacity>
+        </View>
+
+        <Text style={styles.pulseText}>{item.text}</Text>
+
+        {item.images && item.images.length > 0 && (
+          <View>
+            <Pressable onPress={handleImagePress}>
+              {item.images.length > 1 ? (
+                <View>
+                  <FlatList
+                    horizontal
+                    pagingEnabled
+                    data={item.images}
+                    keyExtractor={(uri) => uri}
+                    showsHorizontalScrollIndicator={false}
+                    onMomentumScrollEnd={(e) => setActiveImage(Math.round(e.nativeEvent.contentOffset.x / CAROUSEL_WIDTH))}
+                    renderItem={({ item: uri }) => <Image source={{ uri }} style={styles.pulseImageCarousel} />}
+                  />
+                  <View style={styles.dotsRow}>
+                    {item.images.map((uri, i) => (
+                      <View key={uri} style={[styles.dot, i === activeImage && styles.dotActive]} />
+                    ))}
+                  </View>
+                </View>
+              ) : (
+                <Image source={{ uri: item.images[0] }} style={styles.pulseImage} />
+              )}
+            </Pressable>
+            <Animated.View pointerEvents="none" style={[styles.heartBurst, { opacity: heartOpacity, transform: [{ scale: heartScale }] }]}>
+              <Heart size={82} color="#fff" fill="#fff" />
+            </Animated.View>
+          </View>
+        )}
+
+        {item.likedBy.length > 0 && (
+          <View style={styles.likedByRow}>
+            <View style={styles.likedByIcon}><Heart size={10} color="#fff" fill="#fff" /></View>
+            <Text style={styles.likedByText} numberOfLines={1}>
+              Liked by <Text style={styles.likedByName}>{item.likedBy[0]}</Text>
+              {item.likedBy.length > 1 && <Text> and <Text style={styles.likedByName}>{item.likedBy[1]}</Text></Text>}
+              {others > 0 && <Text> and {others} others</Text>}
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.reactions}>
+          <View>
+            {pickerVisible && (
+              <View style={styles.reactionPicker}>
+                {REACTIONS.map((r) => (
+                  <TouchableOpacity
+                    key={r.type}
+                    style={styles.reactionPickerItem}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      onToggleReaction(r.type);
+                      setPickerVisible(false);
+                    }}
+                  >
+                    <Text style={styles.reactionPickerEmoji}>{r.emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <Animated.View style={{ transform: [{ scale: likeButtonScale }] }}>
+              <TouchableOpacity style={styles.reaction} onPress={handleReactionPress} onLongPress={handleReactionLongPress} delayLongPress={220}>
+                {activeReaction ? (
+                  <Text style={styles.reactionEmojiInline}>{activeReaction.emoji}</Text>
+                ) : (
+                  <Heart size={19} color={theme.textSecondary} fill="transparent" />
+                )}
+                <Text style={[styles.reactionText, activeReaction && { color: activeReaction.color, fontFamily: Fonts?.sansSemiBold }]}>
+                  {activeReaction ? activeReaction.label : item.likes}
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+          <TouchableOpacity style={styles.reaction}><MessageCircle size={19} color={theme.textSecondary} /><Text style={styles.reactionText}>{item.comments}</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.reaction}><Share2 size={18} color={theme.textSecondary} /><Text style={styles.reactionText}>Share</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.save}><Bookmark size={19} color={theme.primary} /></TouchableOpacity>
+        </View>
+
+        {item.topComment && (
+          <View style={styles.commentPreview}>
+            <Text style={styles.commentPreviewText}>
+              <Text style={styles.commentPreviewAuthor}>{item.topComment.author} </Text>
+              {item.topComment.text}
+            </Text>
+            <Text style={styles.viewAllComments}>View all {item.comments} comments</Text>
+          </View>
+        )}
+      </View>
+    </Animated.View>
+  );
+}
+
+const createStyles = (theme: ReturnType<typeof useTheme>) => StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: theme.background }, feed: { paddingBottom: BottomTabInset + 34 },
+  header: { minHeight: 66, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, profileChip: { width: 43, height: 43, borderRadius: 17, overflow: 'hidden' }, profileGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' }, profileInitials: { color: '#fff', fontSize: 13, fontFamily: Fonts?.sansBold }, brand: { alignItems: 'center' }, brandRow: { flexDirection: 'row', alignItems: 'center', gap: 6 }, brandDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: theme.primary }, brandName: { color: theme.text, fontFamily: Fonts?.sansExtraBold, fontSize: 19, letterSpacing: -0.4 }, brandSub: { color: theme.textSecondary, fontFamily: Fonts?.sansBold, fontSize: 8, letterSpacing: 1.25, marginTop: 1 }, inboxButton: { width: 43, height: 43, borderRadius: 16, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center', position: 'relative' }, inboxBadge: { position: 'absolute', top: -4, right: -4, minWidth: 17, height: 17, paddingHorizontal: 4, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.secondary, borderWidth: 2, borderColor: theme.background }, inboxBadgeText: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 9 },
+  actionRow: { marginHorizontal: 20, marginTop: 10, flexDirection: 'row', gap: 8 }, searchAction: { flex: 1, height: 44, paddingHorizontal: 14, borderRadius: 16, backgroundColor: theme.backgroundElement, flexDirection: 'row', alignItems: 'center', gap: 8 }, searchActionText: { color: theme.textSecondary, fontFamily: Fonts?.sansMedium, fontSize: 13 }, scheduleAction: { width: 44, height: 44, borderRadius: 16, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center' }, searchBox: { marginHorizontal: 20, marginTop: 10, borderRadius: 16, backgroundColor: theme.backgroundElement, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14 }, searchInput: { flex: 1, paddingVertical: 12, color: theme.text, fontFamily: Fonts?.sans, fontSize: 14 },
+  storiesHeader: { marginTop: 24, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, sectionTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 17 }, sectionLink: { color: theme.primary, fontFamily: Fonts?.sansSemiBold, fontSize: 12 }, stories: { paddingHorizontal: 20, paddingTop: 13, gap: 14 }, story: { width: 61, alignItems: 'center', position: 'relative' }, storyRing: { width: 56, height: 56, borderRadius: 20, padding: 2, alignItems: 'center', justifyContent: 'center' }, storyAvatarWrap: { width: '100%', height: '100%', borderRadius: 18, overflow: 'hidden' }, storyAvatarImage: { width: '100%', height: '100%' }, storyAvatar: { width: '100%', height: '100%', borderRadius: 18, alignItems: 'center', justifyContent: 'center' }, storyInitials: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 13 }, storyName: { color: theme.textSecondary, fontFamily: Fonts?.sansMedium, fontSize: 10, marginTop: 6, maxWidth: 66 }, addStory: { position: 'absolute', top: 40, right: 0, width: 19, height: 19, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.primary, borderWidth: 2, borderColor: theme.background },
+  shareCard: { marginHorizontal: 20, marginTop: 23, borderRadius: 20, backgroundColor: theme.backgroundElement, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }, shareAvatar: { width: 35, height: 35, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.primary }, shareAvatarText: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 11 }, sharePrompt: { flex: 1, color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 13 }, shareCamera: { width: 32, height: 32, borderRadius: 11, backgroundColor: theme.backgroundSelected, alignItems: 'center', justifyContent: 'center' }, feedTitleRow: { marginTop: 28, paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, feedHint: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 11, marginTop: 2 },
+  pulseCard: { marginHorizontal: 20, borderRadius: 23, padding: 15, backgroundColor: theme.backgroundElement, shadowColor: '#241B4D', shadowOpacity: 0.05, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
+  pulseHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 }, authorAvatar: { width: 40, height: 40, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, authorAvatarImage: { width: 40, height: 40, borderRadius: 15 }, authorInitials: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 12 }, authorCopy: { flex: 1 }, authorNameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 }, authorName: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 14 }, pulseMeta: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 11, marginTop: 2 }, pulseText: { color: theme.text, fontFamily: Fonts?.sans, fontSize: 14, lineHeight: 20, marginTop: 14 },
+  pulseImage: { width: '100%', height: 194, borderRadius: 16, marginTop: 13, backgroundColor: theme.backgroundSelected },
+  pulseImageCarousel: { width: CAROUSEL_WIDTH, height: 194, borderRadius: 16, marginTop: 13, backgroundColor: theme.backgroundSelected },
+  dotsRow: { position: 'absolute', bottom: 10, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 5 },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.5)' },
+  dotActive: { width: 14, backgroundColor: '#fff' },
+  heartBurst: { position: 'absolute', top: 13, left: 0, right: 0, height: 194, alignItems: 'center', justifyContent: 'center' },
+  likedByRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 11 },
+  likedByIcon: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#E85AAD', alignItems: 'center', justifyContent: 'center' },
+  likedByText: { flex: 1, color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12 },
+  likedByName: { color: theme.text, fontFamily: Fonts?.sansSemiBold },
+  reactions: { marginTop: 13, paddingTop: 12, borderTopWidth: 1, borderTopColor: theme.backgroundSelected, flexDirection: 'row', alignItems: 'center', gap: 17 },
+  reaction: { flexDirection: 'row', alignItems: 'center', gap: 5 }, reactionText: { color: theme.textSecondary, fontFamily: Fonts?.sansMedium, fontSize: 12 }, reactionEmojiInline: { fontSize: 16 }, save: { marginLeft: 'auto' },
+  reactionPicker: { position: 'absolute', bottom: '100%', left: -6, marginBottom: 10, flexDirection: 'row', backgroundColor: theme.background, borderRadius: 24, paddingHorizontal: 8, paddingVertical: 6, gap: 4, shadowColor: '#241B4D', shadowOpacity: 0.16, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 6, zIndex: 10 },
+  reactionPickerItem: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  reactionPickerEmoji: { fontSize: 22 },
+  commentPreview: { marginTop: 10 },
+  commentPreviewText: { color: theme.text, fontFamily: Fonts?.sans, fontSize: 12.5, lineHeight: 18 },
+  commentPreviewAuthor: { fontFamily: Fonts?.sansSemiBold },
+  viewAllComments: { color: theme.textSecondary, fontFamily: Fonts?.sansMedium, fontSize: 11.5, marginTop: 3 },
+  fab: { position: 'absolute', right: 22, bottom: BottomTabInset + 8, width: 58, height: 58, borderRadius: 21, overflow: 'hidden', shadowColor: '#7B5CFA', shadowOpacity: 0.4, shadowRadius: 13, shadowOffset: { width: 0, height: 7 }, elevation: 8 }, fabGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });
