@@ -1,33 +1,72 @@
 import { useRouter } from 'expo-router';
-import { Check, MessageCircle, Phone, Search, UserPlus, X } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
-import { Image, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Search, UserPlus } from 'lucide-react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Image, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { BottomTabInset, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { getContactsPermission } from '@/hooks/use-permissions';
 import { useTheme } from '@/hooks/use-theme';
+import { getCurrentProfile } from '@/lib/profile';
+import { supabase } from '@/lib/supabase';
 
-type FriendRequest = { id: string; name: string; avatar: string; mutual: number };
-type Friend = { id: string; name: string; avatar: string; online: boolean; lastSeen?: string };
-type Suggestion = { id: string; name: string; avatar: string; mutual: number; status: 'none' | 'pending' };
+type Suggestion = {
+  id: string;
+  name: string;
+  avatar: string | null;
+  mutual: number;
+  status: 'none' | 'pending';
+  bio?: string | null;
+  username?: string | null;
+  source: 'random' | 'contacts';
+};
 
-const INITIAL_REQUESTS: FriendRequest[] = [
-  { id: 'r1', name: 'Efia Owusu', avatar: 'https://images.unsplash.com/photo-1544725176-7c40e5a71c5e?auto=format&fit=crop&w=200&q=80', mutual: 4 },
-  { id: 'r2', name: 'Yaw Adjei', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80', mutual: 1 },
-];
+type IncomingRequest = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string | null;
+  senderUsername?: string | null;
+};
 
-const INITIAL_FRIENDS: Friend[] = [
-  { id: 'f1', name: 'Maya Torres', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80', online: true },
-  { id: 'f2', name: 'Kwame Mensah', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80', online: true },
-  { id: 'f3', name: 'Noor Ahmed', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=200&q=80', online: false, lastSeen: '2h ago' },
-  { id: 'f4', name: 'Daniel Boateng', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=200&q=80', online: false, lastSeen: 'Yesterday' },
-];
+type ProfileRow = {
+  id: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
+  username?: string | null;
+  bio_status?: string | null;
+  phone?: string | null;
+};
 
-const INITIAL_SUGGESTIONS: Suggestion[] = [
-  { id: 's1', name: 'Sarah Osei', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80', mutual: 6, status: 'none' },
-  { id: 's2', name: 'Nora Sarpong', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80', mutual: 2, status: 'none' },
-  { id: 's3', name: 'Kojo Boadi', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80', mutual: 3, status: 'none' },
-];
+function shuffle<T>(items: T[]) {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const current = copy[index];
+    copy[index] = copy[swapIndex];
+    copy[swapIndex] = current;
+  }
+  return copy;
+}
+
+function normalizePhone(value: string | null | undefined) {
+  if (!value) return '';
+  const digits = value.replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('233')) return `+${digits}`;
+  if (digits.startsWith('0')) return `+233${digits.slice(1)}`;
+  return `+${digits}`;
+}
+
+function getInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase() || 'U';
+}
 
 export default function FindFriendsScreen() {
   const router = useRouter();
@@ -35,23 +74,180 @@ export default function FindFriendsScreen() {
   const scheme = useColorScheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const [requests, setRequests] = useState(INITIAL_REQUESTS);
-  const [friends, setFriends] = useState(INITIAL_FRIENDS);
-  const [suggestions, setSuggestions] = useState(INITIAL_SUGGESTIONS);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [contactsOnApp, setContactsOnApp] = useState<Suggestion[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>([]);
   const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const acceptRequest = (request: FriendRequest) => {
-    setRequests((items) => items.filter((r) => r.id !== request.id));
-    setFriends((items) => [{ id: request.id, name: request.name, avatar: request.avatar, online: false, lastSeen: 'Just now' }, ...items]);
+  useEffect(() => {
+    let active = true;
+
+    const loadSuggestions = async () => {
+      try {
+        const currentProfile = await getCurrentProfile();
+        const profileId = currentProfile?.id;
+
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, username, bio_status, phone')
+          .neq('id', profileId ?? '')
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (error) throw error;
+
+        const profiles = (data as ProfileRow[] | null) ?? [];
+        const { data: incomingData, error: incomingError } = await supabase
+          .from('friend_requests')
+          .select('id, sender_id, profiles!friend_requests_sender_id_fkey(id, full_name, avatar_url, username)')
+          .eq('recipient_id', profileId)
+          .eq('status', 'pending');
+
+        if (incomingError) throw incomingError;
+
+        const incoming = ((incomingData ?? []) as Array<any>).map((request) => ({
+          id: request.id,
+          senderId: request.sender_id,
+          senderName: request.profiles?.full_name?.trim() || request.profiles?.username || 'Someone',
+          senderAvatar: request.profiles?.avatar_url ?? null,
+          senderUsername: request.profiles?.username,
+        }));
+        const randomProfiles = shuffle(profiles).slice(0, 8).map((profile) => ({
+          id: profile.id,
+          name: profile.full_name?.trim() || profile.username || 'New user',
+          avatar: profile.avatar_url ?? null,
+          mutual: Math.floor(Math.random() * 9) + 1,
+          status: 'none' as const,
+          bio: profile.bio_status,
+          username: profile.username,
+          source: 'random' as const,
+        }));
+
+        const contactsPermission = await getContactsPermission();
+        let matchedContacts: Suggestion[] = [];
+
+        if (contactsPermission === 'granted') {
+          try {
+            const contactsModule = await import('expo-contacts');
+            const Contacts = (contactsModule as any).default ?? contactsModule;
+            const { data: contactsData } = await Contacts.getContactsAsync({
+              fields: [Contacts.Fields.PhoneNumbers],
+            });
+
+            const normalizedProfiles = new Map(profiles.map((profile) => [normalizePhone(profile.phone), profile]));
+            const seen = new Set<string>();
+
+            matchedContacts = (contactsData ?? [])
+              .flatMap((contact: any) => (contact.phoneNumbers ?? []).map((entry: any) => ({
+                contactName: `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
+                phone: entry.number,
+              })))
+              .map((entry: { phone: string; contactName: string }) => ({
+                phone: normalizePhone(entry.phone),
+                contactName: entry.contactName || 'Contact',
+              }))
+              .filter(({ phone }: { phone: string }) => phone)
+              .map(({ phone, contactName }: { phone: string; contactName: string }) => {
+                const matchedProfile = normalizedProfiles.get(phone);
+                if (!matchedProfile || seen.has(matchedProfile.id)) return null;
+                seen.add(matchedProfile.id);
+                return {
+                  id: matchedProfile.id,
+                  name: matchedProfile.full_name?.trim() || matchedProfile.username || contactName,
+                  avatar: matchedProfile.avatar_url ?? null,
+                  mutual: 3,
+                  status: 'none' as const,
+                  bio: matchedProfile.bio_status,
+                  username: matchedProfile.username,
+                  source: 'contacts' as const,
+                };
+              })
+              .filter(Boolean) as Suggestion[];
+          } catch (contactsError) {
+            console.warn('[find-friends] contacts lookup failed', contactsError);
+          }
+        }
+
+        if (active) {
+          setSuggestions(randomProfiles);
+          setContactsOnApp(matchedContacts);
+          setIncomingRequests(incoming);
+        }
+      } catch (error) {
+        console.warn('[find-friends] could not load suggestions', error);
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadSuggestions();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const toggleConnect = async (id: string, list: 'suggestions' | 'contacts') => {
+    const currentProfile = await getCurrentProfile();
+    const profileId = currentProfile?.id;
+    if (!profileId) return;
+
+    const target = list === 'suggestions'
+      ? suggestions.find((item) => item.id === id)
+      : contactsOnApp.find((item) => item.id === id);
+
+    if (!target) return;
+
+    const { error } = await supabase.from('friend_requests').insert({
+      sender_id: profileId,
+      recipient_id: id,
+      status: 'pending',
+    });
+
+    if (error) {
+      console.warn('[find-friends] request insert failed', error);
+      return;
+    }
+
+    if (list === 'suggestions') {
+      setSuggestions((items) => items.map((item) => (item.id === id ? { ...item, status: 'pending' } : item)));
+      return;
+    }
+
+    setContactsOnApp((items) => items.map((item) => (item.id === id ? { ...item, status: 'pending' } : item)));
   };
 
-  const declineRequest = (id: string) => setRequests((items) => items.filter((r) => r.id !== id));
+  const respondToRequest = async (requestId: string, action: 'accept' | 'decline') => {
+    const currentProfile = await getCurrentProfile();
+    if (!currentProfile?.id) return;
 
-  const toggleConnect = (id: string) =>
-    setSuggestions((items) => items.map((s) => (s.id === id ? { ...s, status: s.status === 'pending' ? 'none' : 'pending' } : s)));
+    if (action === 'decline') {
+      await supabase.from('friend_requests').delete().eq('id', requestId);
+      setIncomingRequests((items) => items.filter((item) => item.id !== requestId));
+      return;
+    }
 
-  const filteredFriends = friends.filter((f) => f.name.toLowerCase().includes(query.trim().toLowerCase()));
-  const filteredSuggestions = suggestions.filter((s) => s.name.toLowerCase().includes(query.trim().toLowerCase()));
+    const { data: requestRow, error: fetchError } = await supabase
+      .from('friend_requests')
+      .select('sender_id, recipient_id')
+      .eq('id', requestId)
+      .maybeSingle();
+
+    if (fetchError || !requestRow) return;
+
+    await supabase.from('friend_requests').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', requestId);
+    await supabase.from('friendships').insert({
+      user_a: requestRow.sender_id,
+      user_b: requestRow.recipient_id,
+    });
+    setIncomingRequests((items) => items.filter((item) => item.id !== requestId));
+  };
+
+  const filteredSuggestions = suggestions.filter((item) => item.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const filteredContacts = contactsOnApp.filter((item) => item.name.toLowerCase().includes(query.trim().toLowerCase()));
 
   return (
     <View style={styles.container}>
@@ -78,76 +274,79 @@ export default function FindFriendsScreen() {
           />
         </View>
 
-        {requests.length > 0 && (
+        {loading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={theme.primary} />
+            <Text style={styles.loadingText}>Finding people for you…</Text>
+          </View>
+        ) : null}
+
+        {incomingRequests.length > 0 ? (
           <>
             <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Friend requests</Text>
-              <View style={styles.countPill}><Text style={styles.countPillText}>{requests.length}</Text></View>
+              <Text style={styles.sectionTitle}>Incoming requests</Text>
+              <View style={styles.countPill}><Text style={styles.countPillText}>{incomingRequests.length}</Text></View>
             </View>
-            {requests.map((request) => (
-              <View key={request.id} style={styles.requestCard}>
-                <Avatar source={request.avatar} styles={styles} size={52} />
-                <View style={styles.requestCopy}>
-                  <Text style={styles.name}>{request.name}</Text>
-                  <Text style={styles.meta}>{request.mutual} mutual friend{request.mutual !== 1 ? 's' : ''}</Text>
-                  <View style={styles.requestActions}>
-                    <TouchableOpacity style={styles.acceptButton} onPress={() => acceptRequest(request)} activeOpacity={0.85}>
-                      <Check size={15} color="#fff" strokeWidth={2.5} />
-                      <Text style={styles.acceptButtonText}>Accept</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.declineButton} onPress={() => declineRequest(request.id)} activeOpacity={0.75}>
-                      <X size={15} color={theme.textSecondary} strokeWidth={2.5} />
-                      <Text style={styles.declineButtonText}>Decline</Text>
-                    </TouchableOpacity>
-                  </View>
+            {incomingRequests.map((request) => (
+              <View key={request.id} style={styles.friendRow}>
+                <Avatar name={request.senderName} source={request.senderAvatar} styles={styles} size={50} />
+                <View style={styles.friendCopy}>
+                  <Text style={styles.name}>{request.senderName}</Text>
+                  <Text style={styles.meta}>{request.senderUsername ? `@${request.senderUsername}` : 'Wants to connect'}</Text>
                 </View>
+                <TouchableOpacity style={styles.connectButton} onPress={() => respondToRequest(request.id, 'accept')} activeOpacity={0.85}>
+                  <Text style={styles.connectButtonText}>Accept</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.pendingButton} onPress={() => respondToRequest(request.id, 'decline')} activeOpacity={0.85}>
+                  <Text style={styles.pendingButtonText}>Decline</Text>
+                </TouchableOpacity>
               </View>
             ))}
           </>
-        )}
+        ) : null}
 
-        <Text style={[styles.sectionTitle, { marginTop: 28, paddingHorizontal: 24 }]}>Your friends</Text>
-        {filteredFriends.length === 0 ? (
-          <Text style={styles.emptyRowText}>No friends match your search.</Text>
-        ) : (
-          filteredFriends.map((friend) => (
-            <View key={friend.id} style={styles.friendRow}>
-              <View style={styles.friendAvatarWrap}>
-                <Avatar source={friend.avatar} styles={styles} size={50} />
-                {friend.online && <View style={styles.onlineDot} />}
-              </View>
-              <View style={styles.friendCopy}>
-                <Text style={styles.name}>{friend.name}</Text>
-                <Text style={styles.meta}>{friend.online ? 'Online' : `Last seen ${friend.lastSeen}`}</Text>
-              </View>
-              <TouchableOpacity style={styles.iconButton} hitSlop={6}>
-                <Phone size={17} color={theme.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.iconButton} hitSlop={6} onPress={() => router.push('/(public)/new_chat')}>
-                <MessageCircle size={17} color={theme.primary} />
-              </TouchableOpacity>
+        {filteredContacts.length > 0 ? (
+          <>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>From your contacts</Text>
+              <View style={styles.countPill}><Text style={styles.countPillText}>{filteredContacts.length}</Text></View>
             </View>
-          ))
-        )}
+            {filteredContacts.map((suggestion) => {
+              const pending = suggestion.status === 'pending';
+              return (
+                <View key={suggestion.id} style={styles.friendRow}>
+                  <Avatar name={suggestion.name} source={suggestion.avatar} styles={styles} size={50} />
+                  <View style={styles.friendCopy}>
+                    <Text style={styles.name}>{suggestion.name}</Text>
+                    <Text style={styles.meta}>{suggestion.bio || 'Using Universal Chat'} </Text>
+                  </View>
+                  <TouchableOpacity style={pending ? styles.pendingButton : styles.connectButton} onPress={() => toggleConnect(suggestion.id, 'contacts')} activeOpacity={0.85}>
+                    {!pending && <UserPlus size={14} color="#fff" strokeWidth={2.5} />}
+                    <Text style={pending ? styles.pendingButtonText : styles.connectButtonText}>{pending ? 'Requested' : 'Connect'}</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </>
+        ) : null}
 
-        <Text style={[styles.sectionTitle, { marginTop: 28, paddingHorizontal: 24 }]}>People you may know</Text>
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Suggested for you</Text>
+          <View style={styles.countPill}><Text style={styles.countPillText}>{filteredSuggestions.length}</Text></View>
+        </View>
         {filteredSuggestions.length === 0 ? (
-          <Text style={styles.emptyRowText}>No suggestions match your search.</Text>
+          <Text style={styles.emptyRowText}>No suggestions match your search right now.</Text>
         ) : (
           filteredSuggestions.map((suggestion) => {
             const pending = suggestion.status === 'pending';
             return (
               <View key={suggestion.id} style={styles.friendRow}>
-                <Avatar source={suggestion.avatar} styles={styles} size={50} />
+                <Avatar name={suggestion.name} source={suggestion.avatar} styles={styles} size={50} />
                 <View style={styles.friendCopy}>
                   <Text style={styles.name}>{suggestion.name}</Text>
-                  <Text style={styles.meta}>{suggestion.mutual} mutual friend{suggestion.mutual !== 1 ? 's' : ''}</Text>
+                  <Text style={styles.meta}>{suggestion.mutual} mutual connection{suggestion.mutual !== 1 ? 's' : ''}</Text>
                 </View>
-                <TouchableOpacity
-                  style={pending ? styles.pendingButton : styles.connectButton}
-                  onPress={() => toggleConnect(suggestion.id)}
-                  activeOpacity={0.85}
-                >
+                <TouchableOpacity style={pending ? styles.pendingButton : styles.connectButton} onPress={() => toggleConnect(suggestion.id, 'suggestions')} activeOpacity={0.85}>
                   {!pending && <UserPlus size={14} color="#fff" strokeWidth={2.5} />}
                   <Text style={pending ? styles.pendingButtonText : styles.connectButtonText}>{pending ? 'Requested' : 'Connect'}</Text>
                 </TouchableOpacity>
@@ -155,13 +354,25 @@ export default function FindFriendsScreen() {
             );
           })
         )}
+
+        <View style={styles.footerHint}>
+          <Text style={styles.footerHintText}>We mix people from your contacts and new profiles from the app so discovery feels familiar and social.</Text>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
-function Avatar({ source, size, styles }: { source: string; size: number; styles: ReturnType<typeof createStyles> }) {
-  return <Image source={{ uri: source }} style={[styles.avatarImage, { width: size, height: size, borderRadius: size * 0.36 }]} />;
+function Avatar({ name, source, size, styles }: { name: string; source: string | null; size: number; styles: ReturnType<typeof createStyles> }) {
+  if (source) {
+    return <Image source={{ uri: source }} style={[styles.avatarImage, { width: size, height: size, borderRadius: size * 0.36 }]} />;
+  }
+
+  return (
+    <View style={[styles.avatarFallback, { width: size, height: size, borderRadius: size * 0.36 }]}> 
+      <Text style={styles.avatarFallbackText}>{getInitials(name)}</Text>
+    </View>
+  );
 }
 
 const createStyles = (theme: ReturnType<typeof useTheme>) => StyleSheet.create({
@@ -180,21 +391,10 @@ const createStyles = (theme: ReturnType<typeof useTheme>) => StyleSheet.create({
   countPill: { minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, backgroundColor: theme.primary, alignItems: 'center', justifyContent: 'center' },
   countPillText: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 11 },
 
-  requestCard: { marginHorizontal: 24, marginBottom: 10, padding: 15, borderRadius: 20, backgroundColor: theme.backgroundElement, flexDirection: 'row', gap: 12 },
-  requestCopy: { flex: 1 },
-  requestActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  acceptButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 38, borderRadius: 12, backgroundColor: theme.primary, paddingHorizontal: 16 },
-  acceptButtonText: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 13 },
-  declineButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 38, borderRadius: 12, backgroundColor: theme.background, paddingHorizontal: 16 },
-  declineButtonText: { color: theme.textSecondary, fontFamily: Fonts?.sansSemiBold, fontSize: 13 },
-
   friendRow: { marginHorizontal: 24, marginBottom: 8, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  friendAvatarWrap: { position: 'relative' },
-  onlineDot: { position: 'absolute', bottom: 1, right: 1, width: 12, height: 12, borderRadius: 6, backgroundColor: '#34C759', borderWidth: 2, borderColor: theme.background },
   friendCopy: { flex: 1 },
   name: { color: theme.text, fontFamily: Fonts?.sansSemiBold, fontSize: 15 },
   meta: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12, marginTop: 2 },
-  iconButton: { width: 36, height: 36, borderRadius: 12, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
 
   connectButton: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, borderRadius: 18, backgroundColor: theme.primary, paddingHorizontal: 14 },
   connectButtonText: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 12.5 },
@@ -202,5 +402,11 @@ const createStyles = (theme: ReturnType<typeof useTheme>) => StyleSheet.create({
   pendingButtonText: { color: theme.textSecondary, fontFamily: Fonts?.sansSemiBold, fontSize: 12.5 },
 
   avatarImage: { backgroundColor: theme.backgroundElement },
+  avatarFallback: { backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center' },
+  avatarFallbackText: { color: theme.primary, fontFamily: Fonts?.sansBold, fontSize: 16 },
   emptyRowText: { paddingHorizontal: 24, color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 13 },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 18 },
+  loadingText: { color: theme.textSecondary, fontFamily: Fonts?.sansMedium, fontSize: 13 },
+  footerHint: { marginHorizontal: 24, marginTop: 20, marginBottom: 16, padding: 14, borderRadius: 16, backgroundColor: theme.backgroundElement },
+  footerHintText: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12.5, lineHeight: 18 },
 });

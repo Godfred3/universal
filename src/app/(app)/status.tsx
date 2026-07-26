@@ -1,12 +1,13 @@
 import { useRouter } from 'expo-router';
 import { Bell, Camera, ChevronRight, PenLine, Plus, Send } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import { Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { GradientWrapper } from '@/components/gradient-wrapper';
 import { BottomTabInset, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
+import { createStatusPost } from '@/lib/posts';
 
 type StatusUpdate = {
   id: string;
@@ -110,7 +111,23 @@ export default function UpdatesScreen() {
               <PenLine size={18} color={theme.textSecondary} style={{ marginTop: 13 }} />
               <TextInput autoFocus multiline value={note} onChangeText={setNote} placeholder="What's on your mind?" placeholderTextColor={theme.textSecondary} style={styles.noteInput} />
             </View>
-            <TouchableOpacity style={[styles.postButton, !note.trim() && { opacity: 0.45 }]} onPress={() => { if (note.trim()) { setNote(''); setComposer(false); } }}>
+            <TouchableOpacity
+              style={[styles.postButton, !note.trim() && { opacity: 0.45 }]}
+              onPress={async () => {
+                const trimmed = note.trim();
+                if (!trimmed) return;
+
+                try {
+                  await createStatusPost(trimmed);
+                  setNote('');
+                  setComposer(false);
+                  router.replace('/(app)');
+                } catch (error) {
+                  console.warn('[status] failed to create post', error);
+                  Alert.alert('Unable to share status', 'Please try again in a moment.');
+                }
+              }}
+            >
               <Send size={18} color="#fff" />
               <Text style={styles.postText}>Post status</Text>
             </TouchableOpacity>

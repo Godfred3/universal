@@ -17,13 +17,14 @@
 
 import { useRouter } from 'expo-router';
 import { Bell, ChevronRight, Edit3, HelpCircle, KeyRound, LockKeyhole, Moon, Sun, UserPlus } from 'lucide-react-native';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { GradientWrapper } from '@/components/gradient-wrapper';
 import { BottomTabInset, Fonts } from '@/constants/theme';
 import { useThemeContext } from '@/context/theme-context';
 import { useTheme } from '@/hooks/use-theme';
+import { getCurrentProfile, ProfileRecord } from '@/lib/profile';
 
 // The three orbit hues double as satellite colors AND settings-row
 // accents, so the whole screen reads as one connected system.
@@ -44,6 +45,7 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const { colorScheme, setTheme } = useThemeContext();
   const dark = colorScheme === 'dark';
+  const [profile, setProfile] = useState<ProfileRecord | null>(null);
 
   const rows = [
     { icon: KeyRound, title: 'Account & identity', sub: 'Profile, devices, security', route: '/(public)/setting_account' as const },
@@ -64,6 +66,21 @@ export default function ProfileScreen() {
   const presencePulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    let active = true;
+
+    const loadProfile = async () => {
+      try {
+        const currentProfile = await getCurrentProfile();
+        if (active) {
+          setProfile(currentProfile);
+        }
+      } catch (error) {
+        console.warn('[public profile] could not load profile', error);
+      }
+    };
+
+    loadProfile();
+
     Animated.timing(contentAnim, {
       toValue: 1,
       duration: 560,
@@ -91,6 +108,7 @@ export default function ProfileScreen() {
     pulseLoop.start();
 
     return () => {
+      active = false;
       spinLoop.stop();
       pulseLoop.stop();
     };
@@ -101,6 +119,16 @@ export default function ProfileScreen() {
   const spinDeg = orbitSpin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const pulseScale = presencePulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.55] });
   const pulseOpacity = presencePulse.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0] });
+  const displayName = profile?.full_name?.trim() || 'Your profile';
+  const handleText = profile?.username ? `@${profile.username}` : '@yourprofile';
+  const bioText = profile?.bio_status || 'A short intro will appear here.';
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase() || 'U';
 
   // Fixed satellite positions around a 120×120 cluster, spun as a group
   const ORBIT_RADIUS = 47;
@@ -159,12 +187,12 @@ export default function ProfileScreen() {
               </Animated.View>
               {/* Still center avatar */}
               <View style={[styles.mainAvatar, { backgroundColor: theme.primary, borderColor: theme.backgroundElement }]}>
-                <Text style={styles.avatarText}>JD</Text>
+                <Text style={styles.avatarText}>{initials}</Text>
               </View>
             </View>
 
-            <Text style={[styles.name, { color: theme.text }]}>John Doe</Text>
-            <Text style={[styles.handle, { color: theme.textSecondary }]}>@johndoe · available for a good chat</Text>
+            <Text style={[styles.name, { color: theme.text }]}>{displayName}</Text>
+            <Text style={[styles.handle, { color: theme.textSecondary }]}>{handleText} · {bioText}</Text>
 
             <TouchableOpacity style={[styles.edit, { backgroundColor: theme.backgroundSelected }]} activeOpacity={0.75}>
               <Edit3 size={16} color={theme.primary} />

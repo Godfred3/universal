@@ -1,9 +1,15 @@
+
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Camera, CheckCircle2, MessageCircle, XCircle } from 'lucide-react-native';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
+    Alert,
+    Animated,
     Image,
     KeyboardAvoidingView,
+    Modal,
     Platform,
     ScrollView,
     StyleSheet,
@@ -15,10 +21,16 @@ import {
 // import * as ImagePicker from 'expo-image-picker';
 import { Fonts, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { getCurrentProfile, saveProfileDraft } from '@/lib/profile';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Simulated username availability — swap in a real API call when ready
 const TAKEN_USERNAMES = ['admin', 'support', 'universalchat', 'chat', 'user'];
+
+// Universal Chat's signature "Aurora Signal" gradient — emerald → teal-cyan → signal blue → indigo.
+// Used sparingly on hero brand moments (logo, primary CTA, camera badge, success state) to stay
+// consistent with the rest of the app rather than the flat theme.primary fill.
+const BRAND_GRADIENT = ['#0FBF8F', '#12A8B5', '#1C8FE0', '#4C5FFF'] as const;
 
 type UsernameStatus = 'idle' | 'available' | 'taken';
 type ThemeValue = ReturnType<typeof useTheme>;
@@ -51,9 +63,14 @@ function AvatarPicker({ colors, image, displayName, onPickImage }: { colors: The
                         </Text>
                     </View>
                 )}
-                <View style={[styles.cameraBadge, { backgroundColor: colors.primary }]}>
+                <LinearGradient
+                    colors={BRAND_GRADIENT}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.cameraBadge}
+                >
                     <Camera color="#fff" size={16} strokeWidth={2.5} />
-                </View>
+                </LinearGradient>
             </TouchableOpacity>
             <Text style={[styles.avatarLabel, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>Add Profile Photo</Text>
             <Text style={[styles.avatarOptional, { color: colors.backgroundSelected, fontFamily: Fonts.sans }]}>Optional</Text>
@@ -81,6 +98,45 @@ function UsernameHelper({ colors, usernameStatus }: { colors: ThemeValue; userna
     return <Text style={[styles.helperText, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>This is how people can find you.</Text>;
 }
 
+function SuccessOverlay({
+    visible,
+    colors,
+    scaleAnim,
+}: {
+    visible: boolean;
+    colors: ThemeValue;
+    scaleAnim: Animated.Value;
+}) {
+    return (
+        <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+            <View style={styles.successBackdrop}>
+                <Animated.View
+                    style={[
+                        styles.successCard,
+                        { backgroundColor: colors.background, transform: [{ scale: scaleAnim }] },
+                    ]}
+                >
+                    <LinearGradient
+                        colors={BRAND_GRADIENT}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.successIconRing}
+                    >
+                        <CheckCircle2 color="#fff" size={40} strokeWidth={2.4} />
+                    </LinearGradient>
+                    <Text style={[styles.successTitle, { color: colors.text, fontFamily: Fonts.sansBold }]}>
+                        You're all set!
+                    </Text>
+                    <Text style={[styles.successSubtitle, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>
+                        Redirecting you to Universal Chat...
+                    </Text>
+                    <ActivityIndicator style={styles.successSpinner} color={colors.primary} />
+                </Animated.View>
+            </View>
+        </Modal>
+    );
+}
+
 export default function ProfileScreen() {
     const router = useRouter();
     const colors = useTheme();
@@ -92,8 +148,47 @@ export default function ProfileScreen() {
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const usernameTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Success confirmation shown after tapping Continue, before navigating on.
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const successScale = useRef(new Animated.Value(0.6)).current;
+    const navigateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const ABOUT_LIMIT = 120;
     const isValid = displayName.trim().length > 0 && usernameStatus === 'available';
+
+    useEffect(() => {
+        let active = true;
+
+        const loadProfile = async () => {
+            try {
+                const profile = await getCurrentProfile();
+                if (!active) return;
+
+                if (profile?.full_name) {
+                    setDisplayName(profile.full_name);
+                }
+                if (profile?.username) {
+                    setUsername(profile.username);
+                    setUsernameStatus('available');
+                }
+                if (profile?.bio_status) {
+                    setAbout(profile.bio_status);
+                }
+                if (profile?.avatar_url) {
+                    setImage(profile.avatar_url);
+                }
+            } catch (error) {
+                console.warn('[profile] could not load saved profile', error);
+            }
+        };
+
+        loadProfile();
+
+        return () => {
+            active = false;
+        };
+    }, []);
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const pickImage = async () => {
@@ -129,16 +224,43 @@ export default function ProfileScreen() {
         }, 500);
     };
 
-    const handleContinue = () => {
-        router.replace('/(auth)/permissions');
+    const handleContinue = async () => {
+        if (!isValid || submitting) return;
+
+        setSubmitting(true);
+
+        try {
+            await saveProfileDraft({
+                fullName: displayName.trim(),
+                username,
+                about: about.trim() || null,
+                avatarUrl: image,
+            });
+
+            setShowSuccess(true);
+            successScale.setValue(0.6);
+            Animated.spring(successScale, {
+                toValue: 1,
+                friction: 6,
+                tension: 80,
+                useNativeDriver: true,
+            }).start();
+
+            if (navigateTimer.current) clearTimeout(navigateTimer.current);
+            navigateTimer.current = setTimeout(() => {
+                router.replace('/(app)/index');
+            }, 1400);
+        } catch (error) {
+            console.warn('[profile] could not save profile', error);
+            Alert.alert('Could not save profile', 'Please try again in a moment.');
+            setSubmitting(false);
+        }
     };
 
     const handleSkipPhoto = () => {
         // Skips only the photo — name + username must already be valid
-        if (isValid) router.replace('/(auth)/permissions');
+        if (isValid) handleContinue();
     };
-
-
 
     // ── Render ────────────────────────────────────────────────────────────────
     return (
@@ -157,9 +279,14 @@ export default function ProfileScreen() {
 
                     {/* Logo */}
                     <View style={styles.logoWrapper}>
-                        <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
+                        <LinearGradient
+                            colors={BRAND_GRADIENT}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.logoBox}
+                        >
                             <MessageCircle color="#fff" size={34} strokeWidth={2} />
-                        </View>
+                        </LinearGradient>
                         <Text style={[styles.appName, { color: colors.primary, fontFamily: Fonts.sansBold }]}>
                             UNIVERSAL CHAT
                         </Text>
@@ -279,28 +406,37 @@ export default function ProfileScreen() {
                     {/* Continue button */}
                     <TouchableOpacity
                         style={[
-                            styles.button,
-                            { backgroundColor: isValid ? colors.primary : colors.backgroundSelected }
+                            styles.buttonWrapper,
+                            !isValid && styles.buttonWrapperDisabled,
                         ]}
-                        disabled={!isValid}
+                        disabled={!isValid || submitting}
                         onPress={handleContinue}
                         activeOpacity={0.85}
                     >
-                        <Text style={[
-                            styles.buttonText,
-                            {
-                                color: isValid ? '#FFF' : colors.textSecondary,
-                                fontFamily: Fonts.sansMedium,
-                            }
-                        ]}>
-                            Continue
-                        </Text>
+                        {isValid ? (
+                            <LinearGradient
+                                colors={BRAND_GRADIENT}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.button}
+                            >
+                                <Text style={[styles.buttonText, { color: '#FFF', fontFamily: Fonts.sansMedium }]}>
+                                    Continue
+                                </Text>
+                            </LinearGradient>
+                        ) : (
+                            <View style={[styles.button, { backgroundColor: colors.backgroundSelected }]}>
+                                <Text style={[styles.buttonText, { color: colors.textSecondary, fontFamily: Fonts.sansMedium }]}>
+                                    Continue
+                                </Text>
+                            </View>
+                        )}
                     </TouchableOpacity>
 
                     {/* Skip photo */}
                     <TouchableOpacity
                         onPress={handleSkipPhoto}
-                        disabled={!isValid}
+                        disabled={!isValid || submitting}
                         style={styles.skipButton}
                         activeOpacity={0.7}
                     >
@@ -316,6 +452,8 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                 </ScrollView>
             </KeyboardAvoidingView>
+
+            <SuccessOverlay visible={showSuccess} colors={colors} scaleAnim={successScale} />
         </SafeAreaView>
     );
 }
@@ -520,13 +658,25 @@ const styles = StyleSheet.create({
     },
 
     // Actions
+    buttonWrapper: {
+        borderRadius: 16,
+        marginTop: Spacing.two,
+        marginBottom: Spacing.two,
+        shadowColor: '#12A8B5',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.28,
+        shadowRadius: 16,
+        elevation: 6,
+    },
+    buttonWrapperDisabled: {
+        shadowOpacity: 0,
+        elevation: 0,
+    },
     button: {
         height: 56,
         borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: Spacing.two,
-        marginBottom: Spacing.two,
     },
     buttonText: {
         fontSize: 18,
@@ -538,5 +688,48 @@ const styles = StyleSheet.create({
     skipText: {
         fontSize: 14,
         textDecorationLine: 'underline',
+    },
+
+    // Success overlay
+    successBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(10,12,16,0.55)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: Spacing.four,
+    },
+    successCard: {
+        width: '100%',
+        maxWidth: 320,
+        borderRadius: 24,
+        paddingVertical: Spacing.five,
+        paddingHorizontal: Spacing.four,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 20 },
+        shadowOpacity: 0.25,
+        shadowRadius: 30,
+        elevation: 12,
+    },
+    successIconRing: {
+        width: 76,
+        height: 76,
+        borderRadius: 38,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: Spacing.three,
+    },
+    successTitle: {
+        fontSize: 20,
+        marginBottom: Spacing.one,
+        textAlign: 'center',
+    },
+    successSubtitle: {
+        fontSize: 13,
+        textAlign: 'center',
+        lineHeight: 19,
+    },
+    successSpinner: {
+        marginTop: Spacing.two,
     },
 });

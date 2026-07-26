@@ -1,13 +1,15 @@
 import { useRouter } from 'expo-router';
-import { Bookmark, Camera, CheckCircle2, Heart, MessageCircle, MoreHorizontal, Plus, Search, Share2, Sparkles } from 'lucide-react-native';
+import { Bookmark, Camera, CheckCircle2, Heart, MessageCircle, MoreHorizontal, Plus, Search, Share2, Sparkles, Users } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Dimensions, FlatList, Image, Pressable, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, FlatList, Image, Modal, Pressable, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GradientWrapper } from '@/components/gradient-wrapper';
 import { BottomTabInset, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
+import { getCurrentProfile, ProfileRecord } from '@/lib/profile';
+import { supabase } from '@/lib/supabase';
 
 type ReactionType = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
 
@@ -39,82 +41,80 @@ const REACTIONS: { type: ReactionType; emoji: string; label: string; color: stri
   { type: 'angry', emoji: '😡', label: 'Angry', color: '#E8503A' },
 ];
 
-const STORIES: Story[] = [
-  { id: 's0', name: 'Your pulse', initials: '+', color: '#6D5DFB', own: true },
-  { id: 's1', name: 'Maya', initials: 'MC', color: '#E85AAD', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80' },
-  { id: 's2', name: 'Kwame', initials: 'KM', color: '#00A6A6', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80' },
-  { id: 's3', name: 'Aisha', initials: 'AO', color: '#F59E55', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=200&q=80', seen: true },
-  { id: 's4', name: 'Nora', initials: 'NS', color: '#5E8BFF', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80' },
-  { id: 's5', name: 'Daniel', initials: 'DB', color: '#7B5CFA', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=200&q=80', seen: true },
-];
-
-const INITIAL_PULSES: Pulse[] = [
-  {
-    id: '1',
-    author: 'Maya Chen',
-    initials: 'MC',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80',
-    ago: '12m',
-    channel: 'Weekend Circle',
-    text: 'Sunrise walks, no rush, and a coffee that tastes like a small holiday. This is the energy I am taking into the weekend.',
-    images: [
-      'https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=900&q=80',
-    ],
-    likes: 284,
-    likedBy: ['Sarah Osei', 'Daniel Boateng'],
-    comments: 26,
-    topComment: { author: 'Daniel', text: 'This looks so peaceful 😍' },
-    reaction: 'love',
-    color: '#E85AAD',
-  },
-  {
-    id: '2',
-    author: 'Kwame Mensah',
-    initials: 'KM',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-    ago: '41m',
-    channel: 'Design Dispatch',
-    text: 'I made a tiny collection of interface details that make a product feel calmer. The best ones almost disappear.',
-    likes: 91,
-    likedBy: ['Nora Sarpong'],
-    comments: 11,
-    topComment: { author: 'Nora', text: 'Saving this whole thread' },
-    reaction: null,
-    color: '#00A6A6',
-  },
-  {
-    id: '3',
-    author: 'Aisha Okafor',
-    initials: 'AO',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=200&q=80',
-    ago: '2h',
-    channel: 'Travel Notes',
-    text: 'The city feels softer after rain. Saving this corner for later.',
-    images: ['https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=900&q=80'],
-    likes: 412,
-    likedBy: ['Maya Chen', 'Kwame Mensah'],
-    comments: 39,
-    reaction: null,
-    color: '#F59E55',
-  },
-];
-
 const gradient = ['#5E5CE6', '#7B5CFA', '#E85AAD'] as const;
 const SEEN_RING = ['#D9D9E3', '#D9D9E3'] as const;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CAROUSEL_WIDTH = SCREEN_WIDTH - 70;
+
+function getDisplayInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase() || 'U';
+}
 
 export default function PulseHomeScreen() {
   const router = useRouter();
   const theme = useTheme();
   const scheme = useColorScheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const [pulses, setPulses] = useState(INITIAL_PULSES);
-  const [stories, setStories] = useState(STORIES);
+  const [fabMenuOpen, setFabMenuOpen] = useState(false);
+  const [pulses, setPulses] = useState<Pulse[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
+  const [profile, setProfile] = useState<ProfileRecord | null>(null);
   const visiblePulses = pulses.filter((pulse) => `${pulse.author} ${pulse.channel} ${pulse.text}`.toLowerCase().includes(query.toLowerCase()));
+
+  useEffect(() => {
+    let active = true;
+
+    const loadProfile = async () => {
+      try {
+        const currentProfile = await getCurrentProfile();
+        if (!active) return;
+        setProfile(currentProfile);
+
+        const { data: friendsData } = await supabase
+          .from('friendships')
+          .select('user_a, user_b')
+          .or(`user_a.eq.${currentProfile?.id},user_b.eq.${currentProfile?.id}`);
+
+        const friendIds = (friendsData ?? []).flatMap((row: any) => [row.user_a, row.user_b]).filter((id: string | null) => id && id !== currentProfile?.id);
+        const uniqueFriendIds = Array.from(new Set(friendIds));
+
+        const fallbackStories = uniqueFriendIds.slice(0, 4).map((friendId, index) => ({
+          id: `friend-${friendId}`,
+          name: `Friend ${index + 1}`,
+          initials: `F${index + 1}`,
+          color: ['#6D5DFB', '#E85AAD', '#00A6A6', '#F59E55'][index % 4],
+        }));
+
+        const ownStory: Story = {
+          id: 'your-pulse',
+          name: 'Your pulse',
+          initials: '+',
+          color: '#6D5DFB',
+          own: true,
+        };
+
+        if (active) {
+          setStories([ownStory, ...fallbackStories]);
+        }
+      } catch (error) {
+        console.warn('[home] could not load home data', error);
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const toggleReaction = (id: string, type: ReactionType) =>
     setPulses((items) =>
@@ -149,9 +149,9 @@ export default function PulseHomeScreen() {
         ListHeaderComponent={
           <>
             <View style={styles.header}>
-              <TouchableOpacity style={styles.profileChip} onPress={() => router.push('/(public)/profile')}><GradientWrapper colors={gradient} style={styles.profileGradient}><Text style={styles.profileInitials}>JD</Text></GradientWrapper></TouchableOpacity>
+              <TouchableOpacity style={styles.profileChip} onPress={() => router.push('/(public)/profile')}><GradientWrapper colors={gradient} style={styles.profileGradient}><Text style={styles.profileInitials}>{profile ? getDisplayInitials(profile.full_name || profile.username || 'User') : 'U'}</Text></GradientWrapper></TouchableOpacity>
               <View style={styles.brand}><View style={styles.brandRow}><View style={styles.brandDot} /><Text style={styles.brandName}>Universal</Text></View><Text style={styles.brandSub}>Universal Chat</Text></View>
-              <TouchableOpacity style={styles.inboxButton} onPress={() => router.push('/(chat)/Main_chat')}><MessageCircle size={20} color={theme.text} /><View style={styles.inboxBadge}><Text style={styles.inboxBadgeText}>3</Text></View></TouchableOpacity>
+              <TouchableOpacity style={styles.inboxButton} onPress={() => router.push('/(chat)/Main_chat')}><MessageCircle size={20} color={theme.text} /><View style={styles.inboxBadge}><Text style={styles.inboxBadgeText}>0</Text></View></TouchableOpacity>
             </View>
 
             {searching ? <View style={styles.searchBox}><Search size={18} color={theme.textSecondary} /><TextInput autoFocus value={query} onChangeText={setQuery} placeholder="Find people, circles, ideas" placeholderTextColor={theme.textSecondary} style={styles.searchInput} /></View> : null}
@@ -178,7 +178,7 @@ export default function PulseHomeScreen() {
               )}
             />
 
-            <TouchableOpacity style={styles.shareCard} activeOpacity={0.86} onPress={() => router.push('/(app)/status')}><View style={styles.shareAvatar}><Text style={styles.shareAvatarText}>JD</Text></View><Text style={styles.sharePrompt}>Share something with your circle</Text><View style={styles.shareCamera}><Camera size={17} color={theme.primary} /></View></TouchableOpacity>
+            <TouchableOpacity style={styles.shareCard} activeOpacity={0.86} onPress={() => router.push('/(app)/status')}><View style={styles.shareAvatar}><Text style={styles.shareAvatarText}>{profile ? getDisplayInitials(profile.full_name || profile.username || 'User') : 'U'}</Text></View><Text style={styles.sharePrompt}>Share something with your circle</Text><View style={styles.shareCamera}><Camera size={17} color={theme.primary} /></View></TouchableOpacity>
             <View style={styles.feedTitleRow}><View><Text style={styles.sectionTitle}>Your feed</Text><Text style={styles.feedHint}>Fresh from the people and channels you follow</Text></View><TouchableOpacity><MoreHorizontal size={22} color={theme.textSecondary} /></TouchableOpacity></View>
           </>
         }
@@ -193,8 +193,41 @@ export default function PulseHomeScreen() {
           />
         )}
         ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
+        ListEmptyComponent={
+          <View style={styles.emptyFeedCard}>
+            <Text style={styles.emptyFeedTitle}>Your feed is ready for your first update</Text>
+            <Text style={styles.emptyFeedText}>Once you add friends and connect with people, their activity will appear here.</Text>
+          </View>
+        }
       />
-      <TouchableOpacity style={styles.fab} activeOpacity={0.9} onPress={() => router.push('/(public)/new_chat')}><GradientWrapper colors={gradient} style={styles.fabGradient}><Plus size={25} color="#fff" strokeWidth={2.6} /></GradientWrapper></TouchableOpacity>
+      <TouchableOpacity style={styles.fab} activeOpacity={0.9} onPress={() => setFabMenuOpen(true)}><GradientWrapper colors={gradient} style={styles.fabGradient}><Plus size={25} color="#fff" strokeWidth={2.6} /></GradientWrapper></TouchableOpacity>
+
+      <Modal visible={fabMenuOpen} animationType="fade" transparent onRequestClose={() => setFabMenuOpen(false)}>
+        <Pressable style={styles.fabMenuOverlay} onPress={() => setFabMenuOpen(false)}>
+          <View style={styles.fabMenuContainer}>
+            <TouchableOpacity
+              style={styles.fabMenuItem}
+              onPress={() => {
+                setFabMenuOpen(false);
+                router.push('/(public)/new_chat');
+              }}
+            >
+              <MessageCircle size={20} color={theme.primary} />
+              <Text style={styles.fabMenuText}>New chat</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.fabMenuItem}
+              onPress={() => {
+                setFabMenuOpen(false);
+                router.push('/(public)/new_group');
+              }}
+            >
+              <Users size={20} color={theme.primary} />
+              <Text style={styles.fabMenuText}>New group</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -459,4 +492,12 @@ const createStyles = (theme: ReturnType<typeof useTheme>) => StyleSheet.create({
   commentPreviewAuthor: { fontFamily: Fonts?.sansSemiBold },
   viewAllComments: { color: theme.textSecondary, fontFamily: Fonts?.sansMedium, fontSize: 11.5, marginTop: 3 },
   fab: { position: 'absolute', right: 22, bottom: BottomTabInset + 8, width: 58, height: 58, borderRadius: 21, overflow: 'hidden', shadowColor: '#7B5CFA', shadowOpacity: 0.4, shadowRadius: 13, shadowOffset: { width: 0, height: 7 }, elevation: 8 }, fabGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  fabMenuOverlay: { flex: 1, backgroundColor: 'rgba(3, 7, 18, 0.3)', justifyContent: 'flex-end', alignItems: 'flex-end' },
+  fabMenuContainer: { backgroundColor: theme.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 20, paddingTop: 16, paddingBottom: BottomTabInset + 20, shadowColor: '#241B4D', shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 12 },
+  fabMenuItem: { paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, backgroundColor: theme.backgroundElement, marginBottom: 8 },
+  fabMenuText: { color: theme.text, fontFamily: Fonts?.sansMedium, fontSize: 15 },
+  emptyFeedCard: { marginTop: 12, padding: 18, borderRadius: 20, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.backgroundSelected },
+  emptyFeedTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 16 },
+  emptyFeedText: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 13, marginTop: 6, lineHeight: 19 },
+
 });
