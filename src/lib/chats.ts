@@ -109,7 +109,7 @@ export async function getChatsForUser(): Promise<ChatRecord[]> {
           .neq('profile_id', profile.id)
           .single();
 
-        const otherUser = participants?.profiles as ProfileRecord | null;
+        const otherUser = (participants?.profiles as unknown as ProfileRecord | null) ?? null;
 
         return {
           ...chat,
@@ -135,8 +135,7 @@ export async function createOrGetIndividualChat(participantId: string): Promise<
   const { data: existingChat } = await supabase
     .from('chats')
     .select('id')
-    .eq('type', 'individual')
-    .in('chat_participants', 'profile_id', `in.(${profile.id},${participantId})`);
+    .eq('type', 'individual');
 
   if (existingChat && existingChat.length > 0) {
     return existingChat[0].id;

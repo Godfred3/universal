@@ -70,6 +70,13 @@
           "isAccessMediaLocationEnabled": true
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ChatApp to choose a profile photo or status image.",
+          "cameraPermission": "Allow ChatApp to take a profile photo or status image."
+        }
+      ],
       "expo-av"
     ],
     "experiments": {

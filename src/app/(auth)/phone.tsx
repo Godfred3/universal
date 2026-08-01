@@ -5,9 +5,9 @@ import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, Sta
 
 import { GradientWrapper } from '@/components/gradient-wrapper';
 import { Fonts } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
-import { saveProfileDraft } from '@/lib/profile';
 
 type Gender = 'Male' | 'Female' | 'Other';
 
@@ -44,6 +44,7 @@ export default function SignUpScreen() {
   const theme = useTheme();
   const scheme = useColorScheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { signUpWithEmail } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -58,6 +59,7 @@ export default function SignUpScreen() {
   const [rememberMe, setRememberMe] = useState(true);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Validation functions
   const validateEmail = (email: string): string | null => {
@@ -108,22 +110,25 @@ export default function SignUpScreen() {
 
   const handleSubmit = async () => {
     setSubmitted(true);
-    if (!isValid) return;
+    if (!isValid || submitting) return;
 
+    setSubmitting(true);
     try {
-      await saveProfileDraft({
+      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedPhone = `${selectedCountry.dialCode}${phone.replace(/\D/g, '')}`;
+      const { error } = await signUpWithEmail(normalizedEmail, password, {
         fullName: fullName.trim(),
-        phone: `${selectedCountry.dialCode}${phone.replace(/\D/g, '')}`,
-        username: fullName.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || null,
-        about: 'Joined via Universal Chat',
+        phone: normalizedPhone,
+        gender: gender!,
       });
+      if (error) throw error;
 
-      Alert.alert('Profile ready', 'Your details were saved to the connected profile store.', [
-        { text: 'Continue', onPress: () => router.push({ pathname: '/(auth)/otp', params: { email, phone: `${selectedCountry.dialCode}${phone.replace(/\D/g, '')}` } }) },
-      ]);
+      router.push({ pathname: '/(auth)/otp', params: { email: normalizedEmail } });
     } catch (error) {
       console.warn('[phone] profile save failed', error);
-      Alert.alert('Could not save profile', 'Please try again in a moment.');
+      Alert.alert('Could not create account', error instanceof Error ? error.message : 'Please try again in a moment.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -251,9 +256,9 @@ export default function SignUpScreen() {
         </TouchableOpacity>
         <FieldError message={submitted ? errors.terms : null} styles={styles} />
 
-        <TouchableOpacity style={styles.submitButton} onPress={handleSubmit} activeOpacity={0.85}>
+        <TouchableOpacity style={[styles.submitButton, submitting && { opacity: 0.55 }]} onPress={handleSubmit} activeOpacity={0.85} disabled={submitting}>
           <GradientWrapper colors={['#4361EE', '#7955D9']} style={styles.submitGradient}>
-            <Text style={styles.submitText}>Create account</Text>
+            <Text style={styles.submitText}>{submitting ? 'Sending code...' : 'Create account'}</Text>
           </GradientWrapper>
         </TouchableOpacity>
 

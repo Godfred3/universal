@@ -1,99 +1,101 @@
-// Supabase is disabled for demo mode so the app can run with dummy auth data.
-// Re-enable by restoring the import and removing the no-backend fallback.
-// import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState } from 'react';
 
-// ─── Demo data ─────────────────────────────────────────────────────────────────
-const DEMO_USER = {
-    id: 'demo-user',
-    aud: 'authenticated',
-    role: 'authenticated',
-    email: 'demo@example.com',
-    app_metadata: { provider: 'demo' },
-    user_metadata: { name: 'Demo User', phone: '+10000000000' },
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-} as User;
-
-const DEMO_SESSION = {
-    access_token: 'demo-access-token',
-    token_type: 'bearer',
-    expires_in: 3600,
-    refresh_token: 'demo-refresh-token',
-    expires_at: Math.floor(Date.now() / 1000) + 3600,
-    provider_token: null,
-    provider_refresh_token: null,
-    user: DEMO_USER,
-} as Session;
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+type SignUpDetails = {
+    fullName: string;
+    phone: string;
+    gender: string;
+    username?: string;
+};
 
 interface AuthContextType {
     session: Session | null;
     user: User | null;
     isLoading: boolean;
-    /** Step 1: Sends OTP via Twilio edge function */
-    signInWithPhone: (phone: string) => Promise<{ error: Error | null }>;
-    /** Step 2: Verifies the 6-digit OTP entered by the user */
-    verifyOtp: (phone: string, token: string) => Promise<{ error: Error | null }>;
-    /** Signs out the current user */
+    signUpWithEmail: (email: string, password: string, details: SignUpDetails) => Promise<{ error: Error | null }>;
+    verifyEmailOtp: (email: string, token: string) => Promise<{ error: Error | null }>;
+    resendEmailOtp: (email: string) => Promise<{ error: Error | null }>;
     signOut: () => Promise<void>;
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
-    const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        // Demo session only, no database required.
-        setSession(DEMO_SESSION);
-        setUser(DEMO_USER);
-        setIsLoading(false);
+        let active = true;
+
+        supabase.auth.getSession().then(({ data, error }) => {
+            if (error) console.warn('[auth] could not restore session', error);
+            if (active) {
+                setSession(data.session);
+                setIsLoading(false);
+            }
+        });
+
+        const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+            setSession(nextSession);
+            setIsLoading(false);
+        });
+
+        return () => {
+            active = false;
+            listener.subscription.unsubscribe();
+        };
     }, []);
 
-    /**
-     * Step 1 — Send OTP
-     * Calls the Supabase Edge Function `send-sms` which uses Twilio to deliver
-     * the OTP. Supabase generates the token internally; Twilio sends the SMS.
-     */
-    const signInWithPhone = async (_phone: string): Promise<{ error: Error | null }> => {
-        return { error: null };
+    const signUpWithEmail = async (email: string, password: string, details: SignUpDetails) => {
+        const { error } = await supabase.auth.signUp({
+            email: email.trim().toLowerCase(),
+            password,
+            options: {
+                data: {
+                    full_name: details.fullName,
+                    phone: details.phone,
+                    gender: details.gender,
+                    ...(details.username ? { username: details.username } : {}),
+                },
+            },
+        });
+        return { error };
     };
 
-    /**
-     * Step 2 — Verify OTP
-     * Demo mode bypasses actual verification.
-     */
-    const verifyOtp = async (_phone: string, _token: string): Promise<{ error: Error | null }> => {
-        return { error: null };
+    const verifyEmailOtp = async (email: string, token: string) => {
+        const { error } = await supabase.auth.verifyOtp({
+            email: email.trim().toLowerCase(),
+            token,
+            type: 'signup',
+        });
+        return { error };
+    };
+
+    const resendEmailOtp = async (email: string) => {
+        const { error } = await supabase.auth.resend({
+            type: 'signup',
+            email: email.trim().toLowerCase(),
+        });
+        return { error };
     };
 
     const signOut = async () => {
-        setSession(null);
-        setUser(null);
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
     };
 
     return (
-        <AuthContext.Provider value={{ session, user, isLoading, signInWithPhone, verifyOtp, signOut }}>
+        <AuthContext.Provider
+            value={{ session, user: session?.user ?? null, isLoading, signUpWithEmail, verifyEmailOtp, resendEmailOtp, signOut }}
+        >
             {children}
         </AuthContext.Provider>
     );
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
-
 export function useAuth(): AuthContextType {
     const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
+    if (!context) throw new Error('useAuth must be used within an AuthProvider');
     return context;
 }

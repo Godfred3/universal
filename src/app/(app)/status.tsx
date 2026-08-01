@@ -1,35 +1,23 @@
 import { useRouter } from 'expo-router';
-import { Bell, Camera, ChevronRight, PenLine, Plus, Send } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
-import { Alert, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Bell, Camera, PenLine, Plus, Send } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Image, Modal, Platform, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { GradientWrapper } from '@/components/gradient-wrapper';
 import { BottomTabInset, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
-import { createStatusPost } from '@/lib/posts';
+import { getCurrentProfile, ProfileRecord } from '@/lib/profile';
+import { createStatusPost, FeedPostRecord, getFeedPosts } from '@/lib/posts';
 
-type StatusUpdate = {
-  id: string;
-  name: string;
-  initials: string;
-  avatar?: string;
-  colors: readonly [string, string];
-  count: number;
-  timeAgo: string;
-  viewed: boolean;
-  isGroup?: boolean;
+const initialsFor = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'U';
+const timeAgo = (timestamp: string) => {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 60000));
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
+  return `${Math.floor(minutes / 1440)}d ago`;
 };
-
-const VIEWED_RING = ['#D9D9E3', '#D9D9E3'] as const;
-
-const STATUS_UPDATES: StatusUpdate[] = [
-  { id: 'u1', name: 'Maya Torres', initials: 'MT', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80', colors: ['#7955D9', '#4361EE'], count: 3, timeAgo: '12m', viewed: false },
-  { id: 'u2', name: 'Kwame Mensah', initials: 'KM', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80', colors: ['#3C9CA2', '#00A6A6'], count: 1, timeAgo: '38m', viewed: false },
-  { id: 'u3', name: 'Family 🏠', initials: 'F', colors: ['#4361EE', '#7955D9'], count: 5, timeAgo: '1h', viewed: false, isGroup: true },
-  { id: 'u4', name: 'Noor Ahmed', initials: 'NA', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=200&q=80', colors: ['#D28E4B', '#F5B942'], count: 2, timeAgo: '3h', viewed: true },
-  { id: 'u5', name: 'Daniel Boateng', initials: 'DB', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=200&q=80', colors: ['#E85AAD', '#7955D9'], count: 1, timeAgo: 'Yesterday', viewed: true },
-];
 
 export default function UpdatesScreen() {
   const router = useRouter();
@@ -38,136 +26,95 @@ export default function UpdatesScreen() {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [composer, setComposer] = useState(false);
   const [note, setNote] = useState('');
+  const [profile, setProfile] = useState<ProfileRecord | null>(null);
+  const [posts, setPosts] = useState<FeedPostRecord[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [posting, setPosting] = useState(false);
 
-  const recent = STATUS_UPDATES.filter((u) => !u.viewed);
-  const viewed = STATUS_UPDATES.filter((u) => u.viewed);
+  const load = useCallback(async (showRefresh = true) => {
+    if (showRefresh) setRefreshing(true);
+    try {
+      const [currentProfile, feed] = await Promise.all([getCurrentProfile(), getFeedPosts(50)]);
+      setProfile(currentProfile);
+      setPosts(feed);
+    } catch (error) {
+      console.warn('[status] failed to load', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => { void load(false); }, 0);
+    return () => clearTimeout(timer);
+  }, [load]);
+
+  const share = async () => {
+    const content = note.trim();
+    if (!content || posting) return;
+    setPosting(true);
+    try {
+      await createStatusPost(content);
+      setNote('');
+      setComposer(false);
+      await load();
+    } catch (error) {
+      Alert.alert('Unable to share status', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const ownName = profile?.full_name || profile?.username || 'My profile';
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load()} tintColor={theme.primary} />}>
         <View style={styles.header}>
-          <View>
-            <Text style={styles.eyebrow}>UNIVERSAL</Text>
-            <Text style={styles.title}>Status</Text>
-          </View>
+          <View><Text style={styles.eyebrow}>UNIVERSAL</Text><Text style={styles.title}>Status</Text></View>
           <TouchableOpacity style={styles.bell}><Bell size={19} color={theme.text} /></TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.myStatusCard} activeOpacity={0.85} onPress={() => setComposer(true)}>
           <View style={styles.myStatusRingWrap}>
             <GradientWrapper colors={['#4361EE', '#7955D9']} style={styles.myStatusRing}>
-              <View style={styles.myStatusAvatarWrap}>
-                <Text style={styles.myStatusInitials}>JD</Text>
-              </View>
+              <View style={styles.avatarWrap}>{profile?.avatar_url ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} /> : <Text style={styles.initials}>{initialsFor(ownName)}</Text>}</View>
             </GradientWrapper>
-            <View style={styles.myStatusAddBadge}><Plus size={13} color="#fff" strokeWidth={2.6} /></View>
+            <View style={styles.addBadge}><Plus size={13} color="#fff" strokeWidth={2.6} /></View>
           </View>
-          <View style={styles.myStatusCopy}>
-            <Text style={styles.myStatusTitle}>My status</Text>
-            <Text style={styles.myStatusSubtitle}>Tap to share a photo, video, or write something</Text>
-          </View>
-          <View style={styles.myStatusActions}>
-            <TouchableOpacity style={styles.myStatusActionButton} onPress={() => setComposer(true)} hitSlop={8}>
-              <PenLine size={17} color={theme.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.myStatusActionButton} onPress={() => router.push('/(public)/status_camera')} hitSlop={8}>
-              <Camera size={17} color={theme.primary} />
-            </TouchableOpacity>
+          <View style={styles.myStatusCopy}><Text style={styles.myStatusTitle}>My status</Text><Text style={styles.subtitle}>Tap to share something with your contacts</Text></View>
+          <View style={styles.actions}>
+            <TouchableOpacity style={styles.action} onPress={() => setComposer(true)}><PenLine size={17} color={theme.primary} /></TouchableOpacity>
+            <TouchableOpacity style={styles.action} onPress={() => router.push('/(public)/status_camera')}><Camera size={17} color={theme.primary} /></TouchableOpacity>
           </View>
         </TouchableOpacity>
 
-        {recent.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Recent updates</Text>
-            {recent.map((update) => (
-              <StatusRow key={update.id} update={update} styles={styles} theme={theme} />
-            ))}
-          </>
-        )}
-
-        {viewed.length > 0 && (
-          <>
-            <Text style={[styles.sectionTitle, { marginTop: 26 }]}>Viewed updates</Text>
-            {viewed.map((update) => (
-              <StatusRow key={update.id} update={update} styles={styles} theme={theme} />
-            ))}
-          </>
-        )}
+        <Text style={styles.sectionTitle}>Recent updates</Text>
+        {!refreshing && posts.length === 0 ? (
+          <View style={styles.empty}><Text style={styles.emptyTitle}>No status updates yet</Text><Text style={styles.subtitle}>Your first status will appear here after you share it.</Text></View>
+        ) : posts.map((post, index) => {
+          const name = post.profiles?.full_name || post.profiles?.username || 'Universal user';
+          return (
+            <View key={post.id} style={styles.updateCard}>
+              <GradientWrapper colors={index % 2 ? ['#3C9CA2', '#00A6A6'] : ['#7955D9', '#4361EE']} style={styles.updateRing}>
+                <View style={styles.updateAvatar}>{post.profiles?.avatar_url ? <Image source={{ uri: post.profiles.avatar_url }} style={styles.avatarImage} /> : <Text style={styles.updateInitials}>{initialsFor(name)}</Text>}</View>
+              </GradientWrapper>
+              <View style={styles.updateCopy}><View style={styles.updateHeader}><Text style={styles.updateName}>{name}</Text><Text style={styles.updateTime}>{timeAgo(post.created_at)}</Text></View><Text style={styles.updateContent}>{post.content}</Text></View>
+            </View>
+          );
+        })}
       </ScrollView>
 
       <Modal visible={composer} animationType="slide" transparent onRequestClose={() => setComposer(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <View>
-                <Text style={styles.sheetTitle}>New status</Text>
-                <Text style={styles.sheetSub}>Visible to your contacts for 24 hours.</Text>
-              </View>
-              <TouchableOpacity onPress={() => setComposer(false)}><Text style={styles.cancel}>Cancel</Text></TouchableOpacity>
-            </View>
-            <View style={styles.noteBox}>
-              <PenLine size={18} color={theme.textSecondary} style={{ marginTop: 13 }} />
-              <TextInput autoFocus multiline value={note} onChangeText={setNote} placeholder="What's on your mind?" placeholderTextColor={theme.textSecondary} style={styles.noteInput} />
-            </View>
-            <TouchableOpacity
-              style={[styles.postButton, !note.trim() && { opacity: 0.45 }]}
-              onPress={async () => {
-                const trimmed = note.trim();
-                if (!trimmed) return;
-
-                try {
-                  await createStatusPost(trimmed);
-                  setNote('');
-                  setComposer(false);
-                  router.replace('/(app)');
-                } catch (error) {
-                  console.warn('[status] failed to create post', error);
-                  Alert.alert('Unable to share status', 'Please try again in a moment.');
-                }
-              }}
-            >
-              <Send size={18} color="#fff" />
-              <Text style={styles.postText}>Post status</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <View style={styles.overlay}><View style={styles.sheet}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}><View><Text style={styles.sheetTitle}>New status</Text><Text style={styles.subtitle}>Share a live update with your contacts.</Text></View><TouchableOpacity onPress={() => setComposer(false)}><Text style={styles.cancel}>Cancel</Text></TouchableOpacity></View>
+          <View style={styles.noteBox}><PenLine size={18} color={theme.textSecondary} style={{ marginTop: 13 }} /><TextInput autoFocus multiline value={note} onChangeText={setNote} maxLength={500} placeholder="What's on your mind?" placeholderTextColor={theme.textSecondary} style={styles.noteInput} /></View>
+          <TouchableOpacity style={[styles.postButton, (!note.trim() || posting) && { opacity: 0.45 }]} onPress={share} disabled={!note.trim() || posting}><Send size={18} color="#fff" /><Text style={styles.postText}>{posting ? 'Posting...' : 'Post status'}</Text></TouchableOpacity>
+        </View></View>
       </Modal>
-
-      <View style={styles.fabStack}>
-        <TouchableOpacity style={styles.editFab} onPress={() => setComposer(true)}>
-          <PenLine size={18} color={theme.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.cameraFab} onPress={() => router.push('/(public)/status_camera')}>
-          <Camera size={22} color="#fff" />
-        </TouchableOpacity>
-      </View>
     </View>
-  );
-}
-
-function StatusRow({ update, styles, theme }: { update: StatusUpdate; styles: ReturnType<typeof createStyles>; theme: ReturnType<typeof useTheme> }) {
-  return (
-    <TouchableOpacity style={styles.updateRow} activeOpacity={0.75}>
-      <View style={styles.updateRingWrap}>
-        <GradientWrapper colors={update.viewed ? VIEWED_RING : update.colors} style={styles.updateRing}>
-          <View style={styles.updateAvatarWrap}>
-            {update.avatar ? (
-              <Text style={styles.updateInitials}>{update.initials}</Text>
-            ) : (
-              <Text style={styles.updateInitials}>{update.initials}</Text>
-            )}
-          </View>
-        </GradientWrapper>
-        <View style={styles.updateCountBadge}><Text style={styles.updateCountText}>{update.count}</Text></View>
-      </View>
-      <View style={styles.updateCopy}>
-        <Text style={styles.updateName}>{update.name}</Text>
-        <Text style={styles.updateMeta}>{update.count} update{update.count > 1 ? 's' : ''} · {update.timeAgo}</Text>
-      </View>
-      <ChevronRight size={18} color={theme.textSecondary} />
-    </TouchableOpacity>
   );
 }
 
@@ -178,54 +125,17 @@ const createStyles = (theme: ReturnType<typeof useTheme>) => StyleSheet.create({
   eyebrow: { color: theme.primary, fontFamily: Fonts?.sansBold, fontSize: 10, letterSpacing: 1.5 },
   title: { color: theme.text, fontFamily: Fonts?.sansExtraBold, fontSize: 35, letterSpacing: -1.2 },
   bell: { width: 43, height: 43, borderRadius: 15, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center' },
-
-  myStatusCard: {
-    marginHorizontal: 24,
-    marginTop: 22,
-    padding: 16,
-    borderRadius: 26,
-    backgroundColor: theme.backgroundElement,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  myStatusRingWrap: { position: 'relative' },
-  myStatusRing: { width: 72, height: 72, borderRadius: 26, padding: 3, alignItems: 'center', justifyContent: 'center' },
-  myStatusAvatarWrap: { width: '100%', height: '100%', borderRadius: 23, backgroundColor: theme.background, alignItems: 'center', justifyContent: 'center' },
-  myStatusInitials: { color: theme.text, fontFamily: Fonts?.sansExtraBold, fontSize: 20 },
-  myStatusAddBadge: { position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderRadius: 12, backgroundColor: theme.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: theme.backgroundElement },
-  myStatusCopy: { flex: 1 },
-  myStatusTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 17 },
-  myStatusSubtitle: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12, marginTop: 4, lineHeight: 17 },
-  myStatusActions: { gap: 10 },
-  myStatusActionButton: { width: 36, height: 36, borderRadius: 12, backgroundColor: theme.background, alignItems: 'center', justifyContent: 'center' },
-
-  sectionTitle: { paddingHorizontal: 24, marginTop: 26, marginBottom: 10, color: theme.textSecondary, fontFamily: Fonts?.sansBold, fontSize: 12.5, textTransform: 'uppercase', letterSpacing: 0.5 },
-
-  updateRow: { marginHorizontal: 24, marginBottom: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 13 },
-  updateRingWrap: { position: 'relative' },
-  updateRing: { width: 60, height: 60, borderRadius: 21, padding: 2.5, alignItems: 'center', justifyContent: 'center' },
-  updateAvatarWrap: { width: '100%', height: '100%', borderRadius: 18, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  updateInitials: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 14 },
-  updateCountBadge: { position: 'absolute', bottom: -3, right: -3, minWidth: 20, height: 20, paddingHorizontal: 4, borderRadius: 10, backgroundColor: theme.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: theme.background },
-  updateCountText: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 10 },
-  updateCopy: { flex: 1 },
-  updateName: { color: theme.text, fontFamily: Fonts?.sansSemiBold, fontSize: 15 },
-  updateMeta: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12, marginTop: 3 },
-
-  fabStack: { position: 'absolute', right: 24, bottom: BottomTabInset + 10, alignItems: 'center', gap: 12 },
-  editFab: { width: 46, height: 46, borderRadius: 17, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
-  cameraFab: { width: 58, height: 58, borderRadius: 21, backgroundColor: theme.primary, alignItems: 'center', justifyContent: 'center', shadowColor: theme.primary, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 7 },
-
-  overlay: { flex: 1, backgroundColor: 'rgba(3, 7, 18, 0.35)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: theme.background, padding: 24, paddingBottom: 36, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
-  sheetHandle: { width: 38, height: 4, borderRadius: 3, backgroundColor: theme.backgroundSelected, alignSelf: 'center', marginBottom: 19 },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  sheetTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 19 },
-  sheetSub: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12, marginTop: 3 },
-  cancel: { color: theme.primary, fontFamily: Fonts?.sansSemiBold, fontSize: 13 },
-  noteBox: { minHeight: 125, backgroundColor: theme.backgroundElement, borderRadius: 18, marginTop: 19, flexDirection: 'row', paddingHorizontal: 14, gap: 10 },
-  noteInput: { flex: 1, color: theme.text, fontFamily: Fonts?.sans, fontSize: 15, textAlignVertical: 'top', paddingTop: 13, paddingBottom: 13 },
-  postButton: { marginTop: 16, height: 52, borderRadius: 18, backgroundColor: theme.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
-  postText: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 15 },
+  myStatusCard: { marginHorizontal: 24, marginTop: 22, padding: 16, borderRadius: 26, backgroundColor: theme.backgroundElement, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  myStatusRingWrap: { position: 'relative' }, myStatusRing: { width: 68, height: 68, borderRadius: 25, padding: 3 },
+  avatarWrap: { flex: 1, borderRadius: 22, backgroundColor: theme.background, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }, avatarImage: { width: '100%', height: '100%' }, initials: { color: theme.text, fontFamily: Fonts?.sansExtraBold, fontSize: 19 },
+  addBadge: { position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderRadius: 12, backgroundColor: theme.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: theme.backgroundElement },
+  myStatusCopy: { flex: 1 }, myStatusTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 17 }, subtitle: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12, marginTop: 4, lineHeight: 17 },
+  actions: { gap: 8 }, action: { width: 36, height: 36, borderRadius: 12, backgroundColor: theme.background, alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: { paddingHorizontal: 24, marginTop: 28, marginBottom: 12, color: theme.textSecondary, fontFamily: Fonts?.sansBold, fontSize: 12.5, textTransform: 'uppercase', letterSpacing: 0.5 },
+  empty: { marginHorizontal: 24, borderRadius: 20, padding: 22, backgroundColor: theme.backgroundElement }, emptyTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 15 },
+  updateCard: { marginHorizontal: 24, marginBottom: 12, padding: 14, borderRadius: 20, backgroundColor: theme.backgroundElement, flexDirection: 'row', gap: 12 },
+  updateRing: { width: 50, height: 50, borderRadius: 18, padding: 2 }, updateAvatar: { flex: 1, borderRadius: 16, backgroundColor: theme.background, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }, updateInitials: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 12 },
+  updateCopy: { flex: 1 }, updateHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 }, updateName: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 14 }, updateTime: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 10 }, updateContent: { color: theme.text, fontFamily: Fonts?.sans, fontSize: 13.5, lineHeight: 19, marginTop: 6 },
+  overlay: { flex: 1, backgroundColor: 'rgba(3,7,18,0.35)', justifyContent: 'flex-end' }, sheet: { backgroundColor: theme.background, padding: 24, paddingBottom: 36, borderTopLeftRadius: 30, borderTopRightRadius: 30 }, sheetHandle: { width: 38, height: 4, borderRadius: 3, backgroundColor: theme.backgroundSelected, alignSelf: 'center', marginBottom: 19 }, sheetHeader: { flexDirection: 'row', justifyContent: 'space-between' }, sheetTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 19 }, cancel: { color: theme.primary, fontFamily: Fonts?.sansSemiBold, fontSize: 13 },
+  noteBox: { minHeight: 125, backgroundColor: theme.backgroundElement, borderRadius: 18, marginTop: 19, flexDirection: 'row', paddingHorizontal: 14, gap: 10 }, noteInput: { flex: 1, color: theme.text, fontFamily: Fonts?.sans, fontSize: 15, textAlignVertical: 'top', paddingTop: 13 }, postButton: { marginTop: 16, height: 52, borderRadius: 18, backgroundColor: theme.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 }, postText: { color: '#fff', fontFamily: Fonts?.sansBold, fontSize: 15 },
 });

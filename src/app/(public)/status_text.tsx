@@ -1,8 +1,10 @@
 import { Fonts } from '@/constants/theme';
+import { createStatusPost } from '@/lib/posts';
 import { useRouter } from 'expo-router';
 import { Check, Smile, Type, X } from 'lucide-react-native';
 import { useRef, useState } from 'react';
 import {
+    Alert,
     Animated,
     ScrollView,
     StyleSheet,
@@ -45,6 +47,7 @@ export default function TextStatusScreen() {
         { id: string; emoji: string; x: number; y: number }[]
     >([]);
     const [showStickerTray, setShowStickerTray] = useState(false);
+    const [sharing, setSharing] = useState(false);
     const nextStickerId = useRef(0);
 
     const [fadeAnim] = useState(() => new Animated.Value(1));
@@ -68,10 +71,18 @@ export default function TextStatusScreen() {
 
     const canShare = text.trim().length > 0 || placedStickers.length > 0;
 
-    const handleShare = () => {
-        // Hook up your status-posting logic here, e.g.:
-        // postStatus({ type: 'text', text, bgColor, stickers: placedStickers });
-        router.back();
+    const handleShare = async () => {
+        if (!canShare || sharing) return;
+        setSharing(true);
+        try {
+            const stickerText = placedStickers.map((sticker) => sticker.emoji).join(' ');
+            await createStatusPost([text.trim(), stickerText].filter(Boolean).join('\n'));
+            router.back();
+        } catch (error) {
+            Alert.alert('Unable to share status', error instanceof Error ? error.message : 'Please try again.');
+        } finally {
+            setSharing(false);
+        }
     };
 
     return (
@@ -164,12 +175,12 @@ export default function TextStatusScreen() {
             <View style={styles.bottomBar}>
                 <Text style={styles.hintText}>Tap a sticker, hold to delete</Text>
                 <TouchableOpacity
-                    style={[styles.sendBtn, { opacity: canShare ? 1 : 0.4 }]}
+                    style={[styles.sendBtn, { opacity: canShare && !sharing ? 1 : 0.4 }]}
                     activeOpacity={0.85}
                     onPress={handleShare}
-                    disabled={!canShare}
+                    disabled={!canShare || sharing}
                 >
-                    <Text style={styles.sendBtnText}>Share Status</Text>
+                    <Text style={styles.sendBtnText}>{sharing ? 'Sharing...' : 'Share Status'}</Text>
                 </TouchableOpacity>
             </View>
         </SafeAreaView>

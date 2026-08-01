@@ -1,5 +1,4 @@
 
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Camera, CheckCircle2, MessageCircle, XCircle } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
@@ -18,14 +17,14 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-// import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { GradientWrapper } from '@/components/gradient-wrapper';
 import { Fonts, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { getCurrentProfile, saveProfileDraft } from '@/lib/profile';
+import { getCurrentProfile, isUsernameAvailable, saveProfileDraft, uploadProfileAvatar } from '@/lib/profile';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Simulated username availability — swap in a real API call when ready
-const TAKEN_USERNAMES = ['admin', 'support', 'universalchat', 'chat', 'user'];
 
 // Universal Chat's signature "Aurora Signal" gradient — emerald → teal-cyan → signal blue → indigo.
 // Used sparingly on hero brand moments (logo, primary CTA, camera badge, success state) to stay
@@ -63,14 +62,14 @@ function AvatarPicker({ colors, image, displayName, onPickImage }: { colors: The
                         </Text>
                     </View>
                 )}
-                <LinearGradient
+                <GradientWrapper
                     colors={BRAND_GRADIENT}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.cameraBadge}
                 >
                     <Camera color="#fff" size={16} strokeWidth={2.5} />
-                </LinearGradient>
+                </GradientWrapper>
             </TouchableOpacity>
             <Text style={[styles.avatarLabel, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>Add Profile Photo</Text>
             <Text style={[styles.avatarOptional, { color: colors.backgroundSelected, fontFamily: Fonts.sans }]}>Optional</Text>
@@ -116,14 +115,14 @@ function SuccessOverlay({
                         { backgroundColor: colors.background, transform: [{ scale: scaleAnim }] },
                     ]}
                 >
-                    <LinearGradient
+                    <GradientWrapper
                         colors={BRAND_GRADIENT}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                         style={styles.successIconRing}
                     >
                         <CheckCircle2 color="#fff" size={40} strokeWidth={2.4} />
-                    </LinearGradient>
+                    </GradientWrapper>
                     <Text style={[styles.successTitle, { color: colors.text, fontFamily: Fonts.sansBold }]}>
                         You're all set!
                     </Text>
@@ -142,6 +141,7 @@ export default function ProfileScreen() {
     const colors = useTheme();
 
     const [image, setImage] = useState<string | null>(null);
+    const [imageMimeType, setImageMimeType] = useState<string | null>(null);
     const [displayName, setDisplayName] = useState('');
     const [username, setUsername] = useState('');
     const [about, setAbout] = useState('');
@@ -192,18 +192,16 @@ export default function ProfileScreen() {
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const pickImage = async () => {
-        setImage(null);
-        // TEMPORARILY DISABLED: uncomment after rebuilding native app with expo-image-picker
-        /*
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsEditing: true,
             aspect: [1, 1],
-            quality: 1,
+            quality: 0.85,
         });
-        if (!result.canceled) setImage(result.assets[0].uri);
-        */
-        console.log('Image picker temporarily disabled');
+        if (!result.canceled) {
+            setImage(result.assets[0].uri);
+            setImageMimeType(result.assets[0].mimeType ?? 'image/jpeg');
+        }
     };
 
     const handleUsernameChange = (value: string) => {
@@ -219,8 +217,13 @@ export default function ProfileScreen() {
         }
 
         // Debounce the lookup by 500 ms
-        usernameTimer.current = setTimeout(() => {
-            setUsernameStatus(TAKEN_USERNAMES.includes(sanitised) ? 'taken' : 'available');
+        usernameTimer.current = setTimeout(async () => {
+            try {
+                setUsernameStatus(await isUsernameAvailable(sanitised) ? 'available' : 'taken');
+            } catch (error) {
+                console.warn('[profile] username lookup failed', error);
+                setUsernameStatus('idle');
+            }
         }, 500);
     };
 
@@ -230,11 +233,12 @@ export default function ProfileScreen() {
         setSubmitting(true);
 
         try {
+            const avatarUrl = image && imageMimeType ? await uploadProfileAvatar(image, imageMimeType) : image;
             await saveProfileDraft({
                 fullName: displayName.trim(),
                 username,
                 about: about.trim() || null,
-                avatarUrl: image,
+                avatarUrl,
             });
 
             setShowSuccess(true);
@@ -279,14 +283,14 @@ export default function ProfileScreen() {
 
                     {/* Logo */}
                     <View style={styles.logoWrapper}>
-                        <LinearGradient
+                        <GradientWrapper
                             colors={BRAND_GRADIENT}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
                             style={styles.logoBox}
                         >
                             <MessageCircle color="#fff" size={34} strokeWidth={2} />
-                        </LinearGradient>
+                        </GradientWrapper>
                         <Text style={[styles.appName, { color: colors.primary, fontFamily: Fonts.sansBold }]}>
                             UNIVERSAL CHAT
                         </Text>
@@ -414,7 +418,7 @@ export default function ProfileScreen() {
                         activeOpacity={0.85}
                     >
                         {isValid ? (
-                            <LinearGradient
+                            <GradientWrapper
                                 colors={BRAND_GRADIENT}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
@@ -423,7 +427,7 @@ export default function ProfileScreen() {
                                 <Text style={[styles.buttonText, { color: '#FFF', fontFamily: Fonts.sansMedium }]}>
                                     Continue
                                 </Text>
-                            </LinearGradient>
+                            </GradientWrapper>
                         ) : (
                             <View style={[styles.button, { backgroundColor: colors.backgroundSelected }]}>
                                 <Text style={[styles.buttonText, { color: colors.textSecondary, fontFamily: Fonts.sansMedium }]}>

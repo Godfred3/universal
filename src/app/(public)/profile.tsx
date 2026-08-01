@@ -15,10 +15,10 @@
  * if you don't have it yet).
  * ──────────────────────────────────────────────────────────────── */
 
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Bell, ChevronRight, Edit3, HelpCircle, KeyRound, LockKeyhole, Moon, Sun, UserPlus } from 'lucide-react-native';
-import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Image, Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { GradientWrapper } from '@/components/gradient-wrapper';
 import { BottomTabInset, Fonts } from '@/constants/theme';
@@ -47,6 +47,14 @@ export default function ProfileScreen() {
   const dark = colorScheme === 'dark';
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
 
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    getCurrentProfile()
+      .then((currentProfile) => { if (active) setProfile(currentProfile); })
+      .catch((error) => console.warn('[public profile] could not refresh profile', error));
+    return () => { active = false; };
+  }, []));
+
   const rows = [
     { icon: KeyRound, title: 'Account & identity', sub: 'Profile, devices, security', route: '/(public)/setting_account' as const },
     { icon: LockKeyhole, title: 'Privacy studio', sub: 'Visibility and message controls', route: '/(public)/setting_privacy' as const },
@@ -54,10 +62,10 @@ export default function ProfileScreen() {
     { icon: HelpCircle, title: 'Help & feedback', sub: 'Support and product notes', route: '/(public)/setting_help' as const },
   ];
 
-  const metrics = [
-    { value: '24', label: 'connections' },
-    { value: '06', label: 'shared circles' },
-    { value: '02', label: 'scheduled' },
+  const details = [
+    { value: profile?.email || 'Not set', label: 'email' },
+    { value: profile?.phone || 'Not set', label: 'phone' },
+    { value: profile?.gender || 'Not set', label: 'gender' },
   ];
 
   // ── Motion: one entrance, one continuous orbit, one presence pulse ──
@@ -187,14 +195,14 @@ export default function ProfileScreen() {
               </Animated.View>
               {/* Still center avatar */}
               <View style={[styles.mainAvatar, { backgroundColor: theme.primary, borderColor: theme.backgroundElement }]}>
-                <Text style={styles.avatarText}>{initials}</Text>
+                {profile?.avatar_url ? <Image source={{ uri: profile.avatar_url }} style={styles.mainAvatarImage} /> : <Text style={styles.avatarText}>{initials}</Text>}
               </View>
             </View>
 
             <Text style={[styles.name, { color: theme.text }]}>{displayName}</Text>
             <Text style={[styles.handle, { color: theme.textSecondary }]}>{handleText} · {bioText}</Text>
 
-            <TouchableOpacity style={[styles.edit, { backgroundColor: theme.backgroundSelected }]} activeOpacity={0.75}>
+            <TouchableOpacity style={[styles.edit, { backgroundColor: theme.backgroundSelected }]} activeOpacity={0.75} onPress={() => router.push('/(auth)/profile')}>
               <Edit3 size={16} color={theme.primary} />
               <Text style={[styles.editText, { color: theme.primary }]}>Edit your space</Text>
             </TouchableOpacity>
@@ -202,13 +210,13 @@ export default function ProfileScreen() {
 
           {/* ── Metrics — one card, thin dividers, no boxiness ── */}
           <View style={[styles.metricsCard, { backgroundColor: theme.backgroundElement }]}>
-            {metrics.map((m, i) => (
+            {details.map((m, i) => (
               <React.Fragment key={m.label}>
                 <View style={styles.metricItem}>
                   <Text style={[styles.metricValue, { color: theme.text }]}>{m.value}</Text>
                   <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>{m.label}</Text>
                 </View>
-                {i < metrics.length - 1 && <View style={[styles.divider, { backgroundColor: theme.backgroundSelected }]} />}
+                {i < details.length - 1 && <View style={[styles.divider, { backgroundColor: theme.backgroundSelected }]} />}
               </React.Fragment>
             ))}
           </View>
@@ -280,6 +288,7 @@ const styles = StyleSheet.create({
     width: 76, height: 76, borderRadius: 27, alignItems: 'center', justifyContent: 'center', borderWidth: 4,
   },
   avatarText: { color: '#fff', fontFamily: Fonts?.sansExtraBold, fontSize: 23 },
+  mainAvatarImage: { width: '100%', height: '100%' },
 
   name: { fontFamily: Fonts?.sansBold, fontSize: 21, marginTop: 14 },
   handle: { fontFamily: Fonts?.sans, fontSize: 13, marginTop: 4 },
@@ -293,7 +302,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', borderRadius: 20, marginTop: 14, paddingVertical: 18,
   },
   metricItem: { flex: 1, alignItems: 'center' },
-  metricValue: { fontFamily: Fonts?.sansExtraBold, fontSize: 20 },
+  metricValue: { fontFamily: Fonts?.sansBold, fontSize: 11, textAlign: 'center', paddingHorizontal: 4 },
   metricLabel: { fontFamily: Fonts?.sans, fontSize: 10, marginTop: 3, textAlign: 'center' },
   divider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', marginVertical: 2 },
 
