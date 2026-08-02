@@ -12,6 +12,8 @@ export interface ProfileRecord {
   last_seen?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  is_authorized?: boolean;
+  authorized_at?: string | null;
 }
 
 async function requireUser() {

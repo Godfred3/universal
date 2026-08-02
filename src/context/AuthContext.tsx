@@ -13,9 +13,11 @@ interface AuthContextType {
     session: Session | null;
     user: User | null;
     isLoading: boolean;
-    signUpWithEmail: (email: string, password: string, details: SignUpDetails) => Promise<{ error: Error | null }>;
-    verifyEmailOtp: (email: string, token: string) => Promise<{ error: Error | null }>;
-    resendEmailOtp: (email: string) => Promise<{ error: Error | null }>;
+    isAuthorized: boolean;
+    signInWithEmail: (email: string, password: string) => Promise<{ authorized: boolean; error: Error | null }>;
+    signUpWithEmail: (email: string, password: string, details: SignUpDetails) => Promise<{ code: string | null; error: Error | null }>;
+    authorizeAccount: (code: string) => Promise<{ authorized: boolean; error: Error | null }>;
+    generateAuthorizationCode: () => Promise<{ code: string | null; error: Error | null }>;
     signOut: () => Promise<void>;
 }
 
@@ -24,6 +26,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isAuthorized, setIsAuthorized] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -32,13 +35,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (error) console.warn('[auth] could not restore session', error);
             if (active) {
                 setSession(data.session);
-                setIsLoading(false);
+                setIsAuthorized(false);
+                setIsLoading(Boolean(data.session));
             }
         });
 
-        const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+        const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
             setSession(nextSession);
-            setIsLoading(false);
+            if (!nextSession) {
+                setIsAuthorized(false);
+                setIsLoading(false);
+            } else if (event === 'SIGNED_IN') {
+                setIsLoading(true);
+            }
         });
 
         return () => {
@@ -47,8 +56,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
+    useEffect(() => {
+        let active = true;
+        const userId = session?.user.id;
+
+        if (!userId) {
+            return () => { active = false; };
+        }
+
+        supabase
+            .from('profiles')
+            .select('is_authorized')
+            .eq('id', userId)
+            .maybeSingle()
+            .then(({ data, error }) => {
+                if (error) console.warn('[auth] could not load authorization state', error);
+                if (active) {
+                    setIsAuthorized(data?.is_authorized === true);
+                    setIsLoading(false);
+                }
+            });
+
+        return () => { active = false; };
+    }, [session?.user.id]);
+
     const signUpWithEmail = async (email: string, password: string, details: SignUpDetails) => {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
             email: email.trim().toLowerCase(),
             password,
             options: {
@@ -60,24 +93,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 },
             },
         });
-        return { error };
+        if (error) return { code: null, error };
+        if (!data.session) {
+            return { code: null, error: new Error('Account creation needs email confirmation disabled in Supabase Auth.') };
+        }
+        const { data: code, error: codeError } = await supabase.rpc('issue_account_authorization_code');
+        return { code: typeof code === 'string' ? code : null, error: codeError };
     };
 
-    const verifyEmailOtp = async (email: string, token: string) => {
-        const { error } = await supabase.auth.verifyOtp({
+    const signInWithEmail = async (email: string, password: string) => {
+        const { data: signInData, error } = await supabase.auth.signInWithPassword({
             email: email.trim().toLowerCase(),
-            token,
-            type: 'signup',
+            password,
         });
-        return { error };
+        if (error || !signInData.user) return { authorized: false, error };
+
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('is_authorized')
+            .eq('id', signInData.user.id)
+            .maybeSingle();
+        if (profileError) return { authorized: false, error: profileError };
+
+        const authorized = profile?.is_authorized === true;
+        setIsAuthorized(authorized);
+        setIsLoading(false);
+        return { authorized, error: null };
     };
 
-    const resendEmailOtp = async (email: string) => {
-        const { error } = await supabase.auth.resend({
-            type: 'signup',
-            email: email.trim().toLowerCase(),
-        });
-        return { error };
+    const generateAuthorizationCode = async () => {
+        const { data, error } = await supabase.rpc('issue_account_authorization_code');
+        return { code: typeof data === 'string' ? data : null, error };
+    };
+
+    const authorizeAccount = async (code: string) => {
+        const { data, error } = await supabase.rpc('verify_account_authorization_code', { submitted_code: code });
+        if (!error && data === true) setIsAuthorized(true);
+        return { authorized: data === true, error };
     };
 
     const signOut = async () => {
@@ -87,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return (
         <AuthContext.Provider
-            value={{ session, user: session?.user ?? null, isLoading, signUpWithEmail, verifyEmailOtp, resendEmailOtp, signOut }}
+            value={{ session, user: session?.user ?? null, isLoading, isAuthorized, signInWithEmail, signUpWithEmail, authorizeAccount, generateAuthorizationCode, signOut }}
         >
             {children}
         </AuthContext.Provider>

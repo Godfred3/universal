@@ -4,12 +4,14 @@
 // Import and use individual request functions wherever needed.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { requireOptionalNativeModule } from 'expo-modules-core';
 import { Platform } from 'react-native';
 
 const isWeb = Platform.OS === 'web';
 
 async function loadContacts() {
   if (isWeb) return null;
+  if (!requireOptionalNativeModule('ExpoContactsNext')) return null;
   try {
     return await import('expo-contacts');
   } catch {
@@ -66,12 +68,12 @@ export async function requestContactsPermission(): Promise<PermissionStatus> {
   if (isWeb) return 'granted';
   const loaded = await loadContacts();
   const Contacts = normalizeModule(loaded);
-  if (!Contacts || typeof Contacts.requestPermissionsAsync !== 'function') return 'granted';
+  if (!Contacts || typeof Contacts.requestPermissionsAsync !== 'function') return 'denied';
   try {
     const { status } = await Contacts.requestPermissionsAsync();
     return status as PermissionStatus;
   } catch {
-    return 'granted';
+    return 'denied';
   }
 }
 
@@ -79,12 +81,12 @@ export async function getContactsPermission(): Promise<PermissionStatus> {
   if (isWeb) return 'granted';
   const loaded = await loadContacts();
   const Contacts = normalizeModule(loaded);
-  if (!Contacts || typeof Contacts.getPermissionsAsync !== 'function') return 'granted';
+  if (!Contacts || typeof Contacts.getPermissionsAsync !== 'function') return 'denied';
   try {
     const { status } = await Contacts.getPermissionsAsync();
     return status as PermissionStatus;
   } catch {
-    return 'granted';
+    return 'denied';
   }
 }
 

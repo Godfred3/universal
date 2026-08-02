@@ -1,6 +1,6 @@
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Bookmark, Camera, CheckCircle2, Heart, MessageCircle, MoreHorizontal, Plus, Search, Share2, Sparkles, Users } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Dimensions, FlatList, Image, Modal, Pressable, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import { BottomTabInset, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { getCurrentProfile, ProfileRecord } from '@/lib/profile';
+import { getUnreadMessageCount } from '@/lib/chats';
 import { supabase } from '@/lib/supabase';
 
 type ReactionType = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
@@ -67,6 +68,7 @@ export default function PulseHomeScreen() {
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const visiblePulses = pulses.filter((pulse) => `${pulse.author} ${pulse.channel} ${pulse.text}`.toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
@@ -86,12 +88,20 @@ export default function PulseHomeScreen() {
         const friendIds = (friendsData ?? []).flatMap((row: any) => [row.user_a, row.user_b]).filter((id: string | null) => id && id !== currentProfile?.id);
         const uniqueFriendIds = Array.from(new Set(friendIds));
 
-        const fallbackStories = uniqueFriendIds.slice(0, 4).map((friendId, index) => ({
-          id: `friend-${friendId}`,
-          name: `Friend ${index + 1}`,
-          initials: `F${index + 1}`,
-          color: ['#6D5DFB', '#E85AAD', '#00A6A6', '#F59E55'][index % 4],
-        }));
+        const { data: friendProfiles } = uniqueFriendIds.length > 0
+          ? await supabase.from('profiles').select('id, full_name, username, avatar_url').in('id', uniqueFriendIds.slice(0, 4))
+          : { data: [] };
+
+        const friendStories = (friendProfiles ?? []).map((friend, index) => {
+          const friendName = friend.full_name?.trim() || friend.username || 'Friend';
+          return {
+            id: `friend-${friend.id}`,
+            name: friendName,
+            initials: getDisplayInitials(friendName),
+            avatar: friend.avatar_url || undefined,
+            color: ['#6D5DFB', '#E85AAD', '#00A6A6', '#F59E55'][index % 4],
+          };
+        });
 
         const ownStory: Story = {
           id: 'your-pulse',
@@ -102,7 +112,7 @@ export default function PulseHomeScreen() {
         };
 
         if (active) {
-          setStories([ownStory, ...fallbackStories]);
+          setStories([ownStory, ...friendStories]);
         }
       } catch (error) {
         console.warn('[home] could not load home data', error);
@@ -115,6 +125,24 @@ export default function PulseHomeScreen() {
       active = false;
     };
   }, []);
+
+  const refreshUnread = useCallback(async () => {
+    try {
+      setUnreadMessages(await getUnreadMessageCount());
+    } catch (error) {
+      console.warn('[home] unread count failed', error);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { void refreshUnread(); }, [refreshUnread]));
+
+  useEffect(() => {
+    void refreshUnread();
+    const channel = supabase.channel('home-unread-messages')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => { void refreshUnread(); })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [refreshUnread]);
 
   const toggleReaction = (id: string, type: ReactionType) =>
     setPulses((items) =>
@@ -151,7 +179,7 @@ export default function PulseHomeScreen() {
             <View style={styles.header}>
               <TouchableOpacity style={styles.profileChip} onPress={() => router.push('/(public)/profile')}><GradientWrapper colors={gradient} style={styles.profileGradient}><Text style={styles.profileInitials}>{profile ? getDisplayInitials(profile.full_name || profile.username || 'User') : 'U'}</Text></GradientWrapper></TouchableOpacity>
               <View style={styles.brand}><View style={styles.brandRow}><View style={styles.brandDot} /><Text style={styles.brandName}>Universal</Text></View><Text style={styles.brandSub}>Universal Chat</Text></View>
-              <TouchableOpacity style={styles.inboxButton} onPress={() => router.push('/(chat)/Main_chat')}><MessageCircle size={20} color={theme.text} /><View style={styles.inboxBadge}><Text style={styles.inboxBadgeText}>0</Text></View></TouchableOpacity>
+              <TouchableOpacity style={styles.inboxButton} onPress={() => router.push('/(chat)/Main_chat')}><MessageCircle size={20} color={theme.text} />{unreadMessages > 0 ? <View style={styles.inboxBadge}><Text style={styles.inboxBadgeText}>{unreadMessages > 99 ? '99+' : unreadMessages}</Text></View> : null}</TouchableOpacity>
             </View>
 
             {searching ? <View style={styles.searchBox}><Search size={18} color={theme.textSecondary} /><TextInput autoFocus value={query} onChangeText={setQuery} placeholder="Find people, circles, ideas" placeholderTextColor={theme.textSecondary} style={styles.searchInput} /></View> : null}
@@ -492,9 +520,9 @@ const createStyles = (theme: ReturnType<typeof useTheme>) => StyleSheet.create({
   commentPreviewAuthor: { fontFamily: Fonts?.sansSemiBold },
   viewAllComments: { color: theme.textSecondary, fontFamily: Fonts?.sansMedium, fontSize: 11.5, marginTop: 3 },
   fab: { position: 'absolute', right: 22, bottom: BottomTabInset + 8, width: 58, height: 58, borderRadius: 21, overflow: 'hidden', shadowColor: '#7B5CFA', shadowOpacity: 0.4, shadowRadius: 13, shadowOffset: { width: 0, height: 7 }, elevation: 8 }, fabGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  fabMenuOverlay: { flex: 1, backgroundColor: 'rgba(3, 7, 18, 0.3)', justifyContent: 'flex-end', alignItems: 'flex-end' },
-  fabMenuContainer: { backgroundColor: theme.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 20, paddingTop: 16, paddingBottom: BottomTabInset + 20, shadowColor: '#241B4D', shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 12 },
-  fabMenuItem: { paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, backgroundColor: theme.backgroundElement, marginBottom: 8 },
+  fabMenuOverlay: { flex: 1, backgroundColor: 'rgba(3, 7, 18, 0.12)' },
+  fabMenuContainer: { position: 'absolute', right: 22, bottom: BottomTabInset + 76, width: 190, backgroundColor: theme.background, borderRadius: 20, padding: 8, shadowColor: '#241B4D', shadowOpacity: 0.2, shadowRadius: 18, shadowOffset: { width: 0, height: 7 }, elevation: 14 },
+  fabMenuItem: { paddingVertical: 12, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 11, borderRadius: 13, backgroundColor: theme.backgroundElement, marginVertical: 3 },
   fabMenuText: { color: theme.text, fontFamily: Fonts?.sansMedium, fontSize: 15 },
   emptyFeedCard: { marginTop: 12, padding: 18, borderRadius: 20, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.backgroundSelected },
   emptyFeedTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 16 },

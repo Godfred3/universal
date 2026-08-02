@@ -5,14 +5,12 @@ import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TextInput, Toucha
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BottomTabInset, Fonts } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { ContactRecord, createOrGetIndividualChat, getFriendsAndContacts } from '@/lib/chats';
 
 export default function NewChatScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const scheme = useColorScheme();
   const [contacts, setContacts] = useState<ContactRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -116,9 +114,6 @@ export default function NewChatScreen() {
     </SafeAreaView>
   );
 }
-
-const dummyContacts: any[] = [
-];
 
 const createStyles = (theme: ReturnType<typeof useTheme>) =>
   StyleSheet.create({

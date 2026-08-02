@@ -31,7 +31,7 @@ type Chat = {
 };
 
 const STATUS_RING = ['#4361EE', '#7955D9'] as const;
-const FILTERS = ['All', 'Unread', 'Groups', 'Pinned'] as const;
+const CHAT_SECTIONS = ['Chats', 'Groups'] as const;
 
 // Helper to convert database record to Chat type
 const chatRecordToChat = (record: ChatRecord, currentUserId: string): Chat => {
@@ -91,7 +91,7 @@ export default function ChatsScreen() {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All');
+  const [section, setSection] = useState<(typeof CHAT_SECTIONS)[number]>('Chats');
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string>('');
@@ -123,12 +123,7 @@ export default function ChatsScreen() {
 
   const filtered = chats
     .filter((c) => c.name.toLowerCase().includes(query.trim().toLowerCase()))
-    .filter((c) => {
-      if (filter === 'Unread') return c.unread > 0;
-      if (filter === 'Groups') return c.isGroup;
-      if (filter === 'Pinned') return c.pinned;
-      return true;
-    })
+    .filter((c) => section === 'Groups' ? c.isGroup : !c.isGroup)
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
 
   return (
@@ -159,6 +154,14 @@ export default function ChatsScreen() {
           </View>
         )}
 
+        <View style={styles.sectionTabs}>
+          {CHAT_SECTIONS.map((option) => (
+            <TouchableOpacity key={option} onPress={() => setSection(option)} style={[styles.sectionTab, section === option && styles.sectionTabActive]} activeOpacity={0.8}>
+              <Text style={[styles.sectionTabText, section === option && styles.sectionTabTextActive]}>{option}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {loading ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={theme.primary} />
@@ -166,16 +169,16 @@ export default function ChatsScreen() {
         ) : filtered.length === 0 ? (
           <View style={styles.centerContainer}>
             <Users size={48} color={theme.textSecondary} strokeWidth={1} />
-            <Text style={styles.emptyTitle}>No chats yet</Text>
-            <Text style={styles.emptySubtitle}>Start a conversation to get going</Text>
-            <TouchableOpacity style={styles.emptyButton} onPress={() => router.push('/(public)/new_chat')}>
+            <Text style={styles.emptyTitle}>{section === 'Groups' ? 'No groups yet' : 'No chats yet'}</Text>
+            <Text style={styles.emptySubtitle}>{section === 'Groups' ? 'Create a group to chat together' : 'Start a conversation to get going'}</Text>
+            <TouchableOpacity style={styles.emptyButton} onPress={() => router.push(section === 'Groups' ? '/(public)/new_group' : '/(public)/new_chat')}>
               <SquarePen size={18} color={theme.primary} />
-              <Text style={styles.emptyButtonText}>New Chat</Text>
+              <Text style={styles.emptyButtonText}>{section === 'Groups' ? 'New Group' : 'New Chat'}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
-            {activeNow.length > 0 && (
+            {section === 'Chats' && activeNow.length > 0 && (
               <>
                 <Text style={styles.activeLabel}>Active now</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeRow}>
@@ -197,19 +200,6 @@ export default function ChatsScreen() {
             </ScrollView>
               </>
             )}
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={{ gap: 8 }}>
-              {FILTERS.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  onPress={() => setFilter(option)}
-                  style={[styles.filterChip, filter === option && styles.filterChipActive]}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.filterChipText, filter === option && styles.filterChipTextActive]}>{option}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
 
             {filtered.map((chat) => <ChatRow key={chat.id} chat={chat} styles={styles} theme={theme} onPress={() => router.push(`/(chat)/${chat.id}`)} />)}
           </>
@@ -343,11 +333,11 @@ const createStyles = (theme: ReturnType<typeof useTheme>) => StyleSheet.create({
   activeDot: { position: 'absolute', bottom: 1, right: 1, width: 12, height: 12, borderRadius: 6, backgroundColor: '#34C759', borderWidth: 2, borderColor: theme.background },
   activeName: { marginTop: 6, color: theme.textSecondary, fontFamily: Fonts?.sansMedium, fontSize: 10.5, maxWidth: 56, textAlign: 'center' },
 
-  filterRow: { marginTop: 20, marginBottom: 4, paddingHorizontal: 24 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, backgroundColor: theme.backgroundElement },
-  filterChipActive: { backgroundColor: theme.primary },
-  filterChipText: { color: theme.textSecondary, fontFamily: Fonts?.sansSemiBold, fontSize: 12.5 },
-  filterChipTextActive: { color: '#fff' },
+  sectionTabs: { flexDirection: 'row', marginHorizontal: 24, marginTop: 18, marginBottom: 14, padding: 4, borderRadius: 16, backgroundColor: theme.backgroundElement },
+  sectionTab: { flex: 1, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  sectionTabActive: { backgroundColor: theme.primary },
+  sectionTabText: { color: theme.textSecondary, fontFamily: Fonts?.sansSemiBold, fontSize: 13 },
+  sectionTabTextActive: { color: '#fff' },
 
   centerContainer: { flex: 1, minHeight: 300, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 16 },
   emptyTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 18 },

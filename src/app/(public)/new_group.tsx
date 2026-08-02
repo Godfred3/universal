@@ -1,12 +1,13 @@
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Check, Search, X } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { ArrowLeft, Camera, Check, Search, X } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BottomTabInset, Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { ContactRecord, createGroupChat, getFriendsAndContacts } from '@/lib/chats';
+import { ContactRecord, createGroupChat, getFriendsAndContacts, uploadGroupImage } from '@/lib/chats';
 
 export default function NewGroupScreen() {
   const theme = useTheme();
@@ -16,6 +17,12 @@ export default function NewGroupScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [groupName, setGroupName] = useState('');
+  const [description, setDescription] = useState('');
+  const [image, setImage] = useState<string | null>(null);
+  const [imageMimeType, setImageMimeType] = useState('image/jpeg');
+  const [membersCanEdit, setMembersCanEdit] = useState(false);
+  const [membersCanSend, setMembersCanSend] = useState(true);
+  const [membersCanAdd, setMembersCanAdd] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -54,6 +61,14 @@ export default function NewGroupScreen() {
 
   const selectedContacts = contacts.filter((c) => selectedContactIds.has(c.id));
 
+  const pickGroupImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.85 });
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+      setImageMimeType(result.assets[0].mimeType ?? 'image/jpeg');
+    }
+  };
+
   const handleCreateGroup = async () => {
     if (!groupName.trim()) {
       Alert.alert('Group name required', 'Please enter a name for the group');
@@ -67,8 +82,12 @@ export default function NewGroupScreen() {
 
     try {
       setCreating(true);
-      const chatId = await createGroupChat(groupName.trim(), Array.from(selectedContactIds));
-      router.push(`/(chat)/${chatId}`);
+      const imageUrl = image ? await uploadGroupImage(image, imageMimeType) : null;
+      const chatId = await createGroupChat({
+        name: groupName, participantIds: Array.from(selectedContactIds), description, imageUrl,
+        membersCanEdit, membersCanSend, membersCanAdd,
+      });
+      router.replace(`/(chat)/${chatId}`);
     } catch (error) {
       console.warn('[new_group] failed to create group', error);
       Alert.alert('Failed to create group', 'Please try again');
@@ -118,16 +137,30 @@ export default function NewGroupScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Group name input */}
-      <View style={styles.groupNameSection}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formScroll}>
+      <View style={styles.groupIdentity}>
+        <TouchableOpacity style={styles.imagePicker} onPress={pickGroupImage} disabled={creating}>
+          {image ? <Image source={{ uri: image }} style={styles.groupImage} /> : <Camera size={25} color={theme.primary} />}
+        </TouchableOpacity>
+        <View style={styles.groupNameSection}>
         <TextInput
           style={styles.groupNameInput}
-          placeholder="Group name (optional)"
+          placeholder="Group name"
           placeholderTextColor={theme.textSecondary}
           value={groupName}
           onChangeText={setGroupName}
           editable={!creating}
         />
+        </View>
+      </View>
+
+      <TextInput style={styles.descriptionInput} value={description} onChangeText={setDescription} placeholder="Group description (optional)" placeholderTextColor={theme.textSecondary} multiline maxLength={240} />
+
+      <Text style={styles.permissionsTitle}>MEMBER PERMISSIONS</Text>
+      <View style={styles.permissionsCard}>
+        <PermissionRow label="Send messages" value={membersCanSend} onChange={setMembersCanSend} styles={styles} theme={theme} />
+        <PermissionRow label="Edit group information" value={membersCanEdit} onChange={setMembersCanEdit} styles={styles} theme={theme} />
+        <PermissionRow label="Add new members" value={membersCanAdd} onChange={setMembersCanAdd} styles={styles} theme={theme} />
       </View>
 
       {/* Selected members */}
@@ -185,24 +218,38 @@ export default function NewGroupScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderContact}
           contentContainerStyle={styles.listContent}
-          scrollEnabled={true}
+          scrollEnabled={false}
         />
       )}
+      </ScrollView>
     </SafeAreaView>
   );
+}
+
+function PermissionRow({ label, value, onChange, styles, theme }: { label: string; value: boolean; onChange: (value: boolean) => void; styles: ReturnType<typeof createStyles>; theme: ReturnType<typeof useTheme> }) {
+  return <View style={styles.permissionRow}><Text style={styles.permissionLabel}>{label}</Text><Switch value={value} onValueChange={onChange} trackColor={{ false: theme.backgroundSelected, true: theme.primary }} thumbColor="#fff" /></View>;
 }
 
 const createStyles = (theme: ReturnType<typeof useTheme>) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.background },
+    formScroll: { paddingBottom: BottomTabInset + 24 },
     header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
     backButton: { padding: 8 },
     headerText: { flex: 1 },
     headerTitle: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 18 },
     headerSubtitle: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12, marginTop: 2 },
     createButton: { padding: 8 },
-    groupNameSection: { paddingHorizontal: 16, paddingVertical: 12 },
+    groupIdentity: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
+    imagePicker: { width: 64, height: 64, borderRadius: 20, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    groupImage: { width: '100%', height: '100%' },
+    groupNameSection: { flex: 1 },
     groupNameInput: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, backgroundColor: theme.backgroundElement, color: theme.text, fontFamily: Fonts?.sans, fontSize: 14 },
+    descriptionInput: { marginHorizontal: 16, minHeight: 82, borderRadius: 14, backgroundColor: theme.backgroundElement, padding: 13, color: theme.text, fontFamily: Fonts?.sans, fontSize: 14, textAlignVertical: 'top' },
+    permissionsTitle: { marginHorizontal: 16, marginTop: 20, marginBottom: 8, color: theme.textSecondary, fontFamily: Fonts?.sansBold, fontSize: 11, letterSpacing: 1 },
+    permissionsCard: { marginHorizontal: 16, borderRadius: 16, backgroundColor: theme.backgroundElement, overflow: 'hidden', marginBottom: 12 },
+    permissionRow: { minHeight: 54, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.backgroundSelected },
+    permissionLabel: { flex: 1, color: theme.text, fontFamily: Fonts?.sansMedium, fontSize: 14 },
     selectedSection: { paddingHorizontal: 16, paddingBottom: 12 },
     sectionLabel: { color: theme.textSecondary, fontFamily: Fonts?.sansMedium, fontSize: 12, marginBottom: 8 },
     selectedList: { gap: 8 },
@@ -223,6 +270,6 @@ const createStyles = (theme: ReturnType<typeof useTheme>) =>
     contactStatus: { color: theme.textSecondary, fontFamily: Fonts?.sans, fontSize: 12, marginTop: 2 },
     checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 2, borderColor: theme.backgroundSelected, alignItems: 'center', justifyContent: 'center' },
     checkboxSelected: { backgroundColor: theme.primary, borderColor: theme.primary },
-    centerContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    centerContainer: { minHeight: 180, alignItems: 'center', justifyContent: 'center' },
     emptyText: { color: theme.text, fontFamily: Fonts?.sansBold, fontSize: 16 },
   });

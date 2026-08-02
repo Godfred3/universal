@@ -1,4 +1,9 @@
 
+import { GradientWrapper } from '@/components/gradient-wrapper';
+import { Fonts, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { getCurrentProfile, isUsernameAvailable, saveProfileDraft, uploadProfileAvatar } from '@/lib/profile';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { Camera, CheckCircle2, MessageCircle, XCircle } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
@@ -17,11 +22,6 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import { GradientWrapper } from '@/components/gradient-wrapper';
-import { Fonts, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
-import { getCurrentProfile, isUsernameAvailable, saveProfileDraft, uploadProfileAvatar } from '@/lib/profile';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Simulated username availability — swap in a real API call when ready
@@ -124,7 +124,7 @@ function SuccessOverlay({
                         <CheckCircle2 color="#fff" size={40} strokeWidth={2.4} />
                     </GradientWrapper>
                     <Text style={[styles.successTitle, { color: colors.text, fontFamily: Fonts.sansBold }]}>
-                        You're all set!
+                        You&apos;re all set!
                     </Text>
                     <Text style={[styles.successSubtitle, { color: colors.textSecondary, fontFamily: Fonts.sans }]}>
                         Redirecting you to Universal Chat...
@@ -151,7 +151,7 @@ export default function ProfileScreen() {
     // Success confirmation shown after tapping Continue, before navigating on.
     const [showSuccess, setShowSuccess] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    const successScale = useRef(new Animated.Value(0.6)).current;
+    const [successScale] = useState(() => new Animated.Value(0.6));
     const navigateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const ABOUT_LIMIT = 120;
@@ -252,7 +252,7 @@ export default function ProfileScreen() {
 
             if (navigateTimer.current) clearTimeout(navigateTimer.current);
             navigateTimer.current = setTimeout(() => {
-                router.replace('/(app)/index');
+                router.replace('/(app)');
             }, 1400);
         } catch (error) {
             console.warn('[profile] could not save profile', error);

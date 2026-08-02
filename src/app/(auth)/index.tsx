@@ -1,4 +1,4 @@
-import { Spacing } from '@/constants/theme';
+import { Fonts, Spacing } from '@/constants/theme';
 import { useThemeContext } from '@/context/theme-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useRouter } from 'expo-router';
@@ -43,12 +43,15 @@ export default function LandingScreen() {
                 <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Connect securely across every device</Text>
             </View>
 
-            <TouchableOpacity
-                style={[styles.button, { backgroundColor: colors.primary }]}
-                onPress={() => router.push('/(auth)/phone')}
-            >
-                <ArrowRight color="#FFFFFF" size={24} />
-            </TouchableOpacity>
+            <View style={styles.actions}>
+                <TouchableOpacity style={[styles.primaryButton, { backgroundColor: colors.primary }]} onPress={() => router.push('/(auth)/phone')}>
+                    <Text style={styles.primaryButtonText}>Create account</Text>
+                    <ArrowRight color="#FFFFFF" size={20} />
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.secondaryButton, { borderColor: colors.primary }]} onPress={() => router.push('/(auth)/login')}>
+                    <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Log in</Text>
+                </TouchableOpacity>
+            </View>
         </SafeAreaView>
     );
 }
@@ -108,21 +111,25 @@ const styles = StyleSheet.create({
         fontSize: 28,
         fontWeight: '700',
         marginBottom: 10,
-        fontFamily: 'System',
+        fontFamily: Fonts.sansBold,
     },
     subtitle: {
         fontSize: 16,
         lineHeight: 22,
         textAlign: 'center',
         maxWidth: 260,
-        fontFamily: 'System',
+        fontFamily: Fonts.sans,
     },
-    button: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
+    actions: { width: '100%', gap: Spacing.two, marginBottom: Spacing.four },
+    primaryButton: {
+        height: 56,
+        borderRadius: 18,
+        flexDirection: 'row',
+        gap: 8,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: Spacing.four,
     },
+    primaryButtonText: { color: '#FFFFFF', fontFamily: Fonts.sansBold, fontSize: 16 },
+    secondaryButton: { height: 56, borderRadius: 18, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center' },
+    secondaryButtonText: { fontFamily: Fonts.sansBold, fontSize: 16 },
 });

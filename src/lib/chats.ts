@@ -126,67 +126,86 @@ export async function getChatsForUser(): Promise<ChatRecord[]> {
 }
 
 export async function createOrGetIndividualChat(participantId: string): Promise<string> {
-  const profile = await getCurrentProfile();
-  if (!profile?.id) {
-    throw new Error('No profile found');
-  }
-
-  // Check if chat already exists
-  const { data: existingChat } = await supabase
-    .from('chats')
-    .select('id')
-    .eq('type', 'individual');
-
-  if (existingChat && existingChat.length > 0) {
-    return existingChat[0].id;
-  }
-
-  // Create new chat
-  const { data: newChat, error: createError } = await supabase
-    .from('chats')
-    .insert({ type: 'individual' })
-    .select('id')
-    .single();
-
-  if (createError) {
-    throw createError;
-  }
-
-  // Add participants
-  await supabase
-    .from('chat_participants')
-    .insert([
-      { chat_id: newChat.id, profile_id: profile.id },
-      { chat_id: newChat.id, profile_id: participantId },
-    ]);
-
-  return newChat.id;
+  const { data, error } = await supabase.rpc('get_or_create_individual_chat', { other_user_id: participantId });
+  if (error) throw error;
+  if (typeof data !== 'string') throw new Error('The chat could not be opened.');
+  return data;
 }
 
-export async function createGroupChat(groupName: string, participantIds: string[]): Promise<string> {
+export interface ChatRoomDetails {
+  id: string;
+  type: 'individual' | 'group';
+  name?: string | null;
+  description?: string | null;
+  image_url?: string | null;
+  allow_members_send: boolean;
+  current_user_role: 'admin' | 'member';
+  participants: ProfileRecord[];
+}
+
+export interface MessageRecord {
+  id: string;
+  chat_id: string;
+  sender_id: string;
+  content_type: 'text' | 'image' | 'voice' | 'sticker';
+  content: string;
+  created_at: string;
+}
+
+export async function getChatRoom(chatId: string): Promise<ChatRoomDetails> {
+  const { data, error } = await supabase.rpc('get_chat_room', { chat_id_input: chatId });
+  if (error) throw error;
+  if (!data) throw new Error('Chat not found.');
+  return data as ChatRoomDetails;
+}
+
+export async function getChatMessages(chatId: string): Promise<MessageRecord[]> {
+  const { data, error } = await supabase.from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data as MessageRecord[] | null) ?? [];
+}
+
+export async function sendChatMessage(chatId: string, content: string): Promise<MessageRecord> {
   const profile = await getCurrentProfile();
-  if (!profile?.id) {
-    throw new Error('No profile found');
-  }
+  if (!profile?.id) throw new Error('No profile found');
+  const { data, error } = await supabase.from('messages').insert({ chat_id: chatId, sender_id: profile.id, content_type: 'text', content: content.trim() }).select('*').single();
+  if (error) throw error;
+  return data as MessageRecord;
+}
 
-  // Create new group chat
-  const { data: newChat, error: createError } = await supabase
-    .from('chats')
-    .insert({ type: 'group', name: groupName })
-    .select('id')
-    .single();
+export async function getUnreadMessageCount(): Promise<number> {
+  const { data, error } = await supabase.rpc('get_unread_message_count');
+  if (error) throw error;
+  return Number(data ?? 0);
+}
 
-  if (createError) {
-    throw createError;
-  }
+export async function markChatRead(chatId: string): Promise<void> {
+  const { error } = await supabase.rpc('mark_chat_read', { target_chat_id: chatId });
+  if (error) throw error;
+}
 
-  // Add participants (including the creator)
-  await supabase
-    .from('chat_participants')
-    .insert([
-      { chat_id: newChat.id, profile_id: profile.id, role: 'admin' },
-      ...participantIds.map((id) => ({ chat_id: newChat.id, profile_id: id, role: 'member' })),
-    ]);
+export async function uploadGroupImage(uri: string, mimeType = 'image/jpeg'): Promise<string> {
+  const profile = await getCurrentProfile();
+  if (!profile?.id) throw new Error('No profile found');
+  const extension = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+  const path = `${profile.id}/group-${Date.now()}.${extension}`;
+  const response = await fetch(uri);
+  const file = await response.arrayBuffer();
+  const { error } = await supabase.storage.from('group-images').upload(path, file, { contentType: mimeType, upsert: false });
+  if (error) throw error;
+  return supabase.storage.from('group-images').getPublicUrl(path).data.publicUrl;
+}
 
-  return newChat.id;
+export async function createGroupChat(input: {
+  name: string; participantIds: string[]; description?: string; imageUrl?: string | null;
+  membersCanEdit: boolean; membersCanSend: boolean; membersCanAdd: boolean;
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('create_group_chat', {
+    group_name: input.name.trim(), participant_ids: input.participantIds,
+    group_description: input.description?.trim() || null, group_image_url: input.imageUrl || null,
+    members_can_edit: input.membersCanEdit, members_can_send: input.membersCanSend, members_can_add: input.membersCanAdd,
+  });
+  if (error) throw error;
+  if (typeof data !== 'string') throw new Error('The group could not be created.');
+  return data;
 }

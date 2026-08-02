@@ -16,12 +16,13 @@
  * ──────────────────────────────────────────────────────────────── */
 
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Bell, ChevronRight, Edit3, HelpCircle, KeyRound, LockKeyhole, Moon, Sun, UserPlus } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Bell, ChevronRight, Edit3, HelpCircle, KeyRound, LockKeyhole, LogOut, Moon, Sun, UserPlus } from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Animated, Easing, Image, Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { GradientWrapper } from '@/components/gradient-wrapper';
 import { BottomTabInset, Fonts } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { useThemeContext } from '@/context/theme-context';
 import { useTheme } from '@/hooks/use-theme';
 import { getCurrentProfile, ProfileRecord } from '@/lib/profile';
@@ -44,8 +45,23 @@ export default function ProfileScreen() {
   const router = useRouter();
   const theme = useTheme();
   const { colorScheme, setTheme } = useThemeContext();
+  const { signOut } = useAuth();
   const dark = colorScheme === 'dark';
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await signOut();
+      router.replace('/(auth)');
+    } catch (error) {
+      console.warn('[public profile] logout failed', error);
+      Alert.alert('Could not log out', 'Please try again in a moment.');
+      setLoggingOut(false);
+    }
+  };
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -69,9 +85,9 @@ export default function ProfileScreen() {
   ];
 
   // ── Motion: one entrance, one continuous orbit, one presence pulse ──
-  const contentAnim = useRef(new Animated.Value(0)).current;
-  const orbitSpin = useRef(new Animated.Value(0)).current;
-  const presencePulse = useRef(new Animated.Value(0)).current;
+  const [contentAnim] = useState(() => new Animated.Value(0));
+  const [orbitSpin] = useState(() => new Animated.Value(0));
+  const [presencePulse] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     let active = true;
@@ -259,6 +275,16 @@ export default function ProfileScreen() {
               <ChevronRight size={18} color={theme.primary} />
             </GradientWrapper>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.logoutButton, { borderColor: '#EF444455', backgroundColor: hexToRgba('#EF4444', dark ? 0.12 : 0.07) }]}
+            onPress={handleLogout}
+            disabled={loggingOut}
+            activeOpacity={0.75}
+          >
+            {loggingOut ? <ActivityIndicator size="small" color="#EF4444" /> : <LogOut size={19} color="#EF4444" />}
+            <Text style={styles.logoutText}>{loggingOut ? 'Logging out...' : 'Log out'}</Text>
+          </TouchableOpacity>
         </Animated.View>
       </ScrollView>
     </View>
@@ -319,4 +345,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10,
   },
   inviteText: { flex: 1, fontFamily: Fonts?.sansSemiBold, fontSize: 14 },
+  logoutButton: {
+    height: 55, borderRadius: 18, borderWidth: 1, marginTop: 18,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9,
+  },
+  logoutText: { color: '#EF4444', fontFamily: Fonts?.sansBold, fontSize: 14 },
 });

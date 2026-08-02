@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Check, ChevronDown, Eye, EyeOff, Lock, Mail, Phone, User, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GradientWrapper } from '@/components/gradient-wrapper';
 import { Fonts } from '@/constants/theme';
@@ -116,14 +117,15 @@ export default function SignUpScreen() {
     try {
       const normalizedEmail = email.trim().toLowerCase();
       const normalizedPhone = `${selectedCountry.dialCode}${phone.replace(/\D/g, '')}`;
-      const { error } = await signUpWithEmail(normalizedEmail, password, {
+      const { code, error } = await signUpWithEmail(normalizedEmail, password, {
         fullName: fullName.trim(),
         phone: normalizedPhone,
         gender: gender!,
       });
       if (error) throw error;
+      if (!code) throw new Error('Could not generate an authorization code.');
 
-      router.push({ pathname: '/(auth)/otp', params: { email: normalizedEmail } });
+      router.push({ pathname: '/(auth)/otp', params: { code } });
     } catch (error) {
       console.warn('[phone] profile save failed', error);
       Alert.alert('Could not create account', error instanceof Error ? error.message : 'Please try again in a moment.');
@@ -133,6 +135,7 @@ export default function SignUpScreen() {
   };
 
   return (
+    <SafeAreaView style={styles.safeArea}>
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -306,6 +309,7 @@ export default function SignUpScreen() {
         </View>
       </Modal>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -327,6 +331,7 @@ function FieldError({ message, styles }: { message: string | null; styles: Retur
 }
 
 const createStyles = (theme: ReturnType<typeof useTheme>) => StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: theme.background },
   container: { flex: 1, backgroundColor: theme.background },
   content: { padding: 24, paddingTop: Platform.OS === 'ios' ? 60 : 44, paddingBottom: 48 },
   backButton: { width: 40, height: 40, borderRadius: 14, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
